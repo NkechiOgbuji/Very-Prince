@@ -50,9 +50,13 @@ export function PayoutCard({
 
   return (
     <div
-      className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 backdrop-blur-sm transition-all duration-300 hover:border-stellar-purple/30 hover:bg-white/[0.06]"
+      className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
+        balance.isPending 
+          ? "border-stellar-purple/50 bg-stellar-purple/5 animate-pulse" 
+          : "border-white/[0.08] bg-white/[0.04] hover:border-stellar-purple/30 hover:bg-white/[0.06]"
+      } p-6 backdrop-blur-sm`}
       role="article"
-      aria-label={`Payout card for ${balance.address}`}
+      aria-label={`Payout card for ${balance.address}${balance.isPending ? " (Pending)" : ""}`}
     >
       {/* Subtle gradient glow on hover */}
       <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-stellar-purple/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -68,7 +72,11 @@ export function PayoutCard({
           </p>
         </div>
         {/* Status badge */}
-        {hasBalance ? (
+        {balance.isPending ? (
+          <span className="shrink-0 rounded-full border border-stellar-purple/30 bg-stellar-purple/10 px-2 py-0.5 text-xs font-medium text-stellar-purple">
+            Pending...
+          </span>
+        ) : hasBalance ? (
           <span className="shrink-0 rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
             Claimable
           </span>

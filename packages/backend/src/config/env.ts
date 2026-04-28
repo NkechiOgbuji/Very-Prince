@@ -32,6 +32,26 @@ function env(key: string, defaultValue?: string): string {
   return value;
 }
 
+// ─── Auth & Notifications ────────────────────────────────────────────────────
+
+/**
+ * Secret used to sign JWT tokens for one-click unsubscribes.
+ */
+export const JWT_SECRET = env("JWT_SECRET");
+
+/**
+ * API Key for the Resend transactional email service.
+ */
+export const RESEND_API_KEY = env("RESEND_API_KEY");
+
+/**
+ * The public URL of the frontend, used to generate absolute links in emails.
+ */
+export const FRONTEND_URL = env(
+  "FRONTEND_URL",
+  "http://localhost:3000"
+);
+
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 export const SERVER_PORT = parseInt(env("PORT", "3001"), 10);
@@ -73,3 +93,9 @@ export const NETWORK_PASSPHRASE = env(
  * Written to .env.contracts by packages/contracts/scripts/deploy.sh.
  */
 export const CONTRACT_ID = env("CONTRACT_ID", "");
+
+/**
+ * The ledger sequence number when the contract was deployed.
+ * Used to initialize the indexer's cursor.
+ */
+export const DEPLOYMENT_LEDGER = parseInt(env("DEPLOYMENT_LEDGER", "0"), 10);

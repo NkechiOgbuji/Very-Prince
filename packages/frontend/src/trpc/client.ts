@@ -1,0 +1,39 @@
+/**
+ * @file client.ts
+ * @description tRPC client configuration for the very-princess frontend.
+ */
+
+import { createTRPCClient, httpBatchLink } from '@trpc/client';
+import type { AppRouter } from '../../../backend/src/trpc/router';
+
+// Get the backend URL from environment variables
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    // Browser should use relative URL
+    return '';
+  }
+  
+  // Server-side rendering should use the backend URL
+  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+    return process.env.NEXT_PUBLIC_BACKEND_URL.replace('/api/v1/contract', '');
+  }
+  
+  // Default to localhost for development
+  return 'http://localhost:3001';
+};
+
+// Create the tRPC client
+export const trpcClient = createTRPCClient<AppRouter>({
+  links: [
+    httpBatchLink({
+      url: `${getBaseUrl()}/trpc`,
+      headers: () => {
+        // Add any necessary headers here
+        return {};
+      },
+    }),
+  ],
+});
+
+// Export the client for use in components
+export default trpcClient;

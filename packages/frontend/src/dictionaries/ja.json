@@ -1,0 +1,84 @@
+{
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "close": "閉じる",
+    "dashboard": "ダッシュボード",
+    "organizations": "組織",
+    "payouts": "支払い",
+    "profile": "プロフィール"
+  },
+  "navigation": {
+    "dashboard": "ダッシュボード",
+    "github": "GitHubで見る",
+    "stellar_network": "ステラーネットワーク",
+    "drips": "Drips"
+  },
+  "home": {
+    "title": "very-princess — Stellar支払いレジストリ",
+    "description": "Stellar Soroban上に構築された、オープンソースメンテナー向けの分散型支払いレジストリ。Freighterウォレットを接続して支払いを表示・請求してください。",
+    "hero_title": "オープンソース",
+    "hero_subtitle": "支払いレジストリ",
+    "hero_description": "複数組織のメンテナンス支払いのための透明なオンチェーンシステム。組織は登録・配分し、メンテナーは自身の貢献を自己保管 — すべてStellar上で。",
+    "open_dashboard": "ダッシュボードを開く →",
+    "badge_text": "Stellar Soroban構築 · Drips Wave 4",
+    "footer_text": "very-princessはオープンソース — MITライセンス"
+  },
+  "features": {
+    "on_chain": {
+      "title": "オンチェーンレジストリ",
+      "description": "組織とメンテナーはStellar Sorobanに直接登録 — 透明で改ざん不可能。"
+    },
+    "instant_payouts": {
+      "title": "即時支払い",
+      "description": "組織管理者がオンチェーンで支払いを配分。メンテナーは蓄積された残高を単一トランザクションで請求。"
+    },
+    "self_custodial": {
+      "title": "自己保管",
+      "description": "仲介者があなたの資金を保持しません。Freighterウォレットに直接請求 — あなたのキー、あなたのXLM。"
+    },
+    "open_source": {
+      "title": "オープンソース",
+      "description": "Dripsコミュニティ資金調達モデルのために構築。フォーク、拡張、貢献。CONTRIBUTING.md参照。"
+    }
+  },
+  "dashboard": {
+    "title": "ダッシュボード",
+    "connect_wallet": "ウォレット接続",
+    "wallet_connected": "ウォレット接続済み",
+    "organizations": "組織",
+    "maintainers": "メンテナー",
+    "payouts": "支払い",
+    "fund_organization": "組織に資金提供",
+    "allocate_payout": "支払いを配分",
+    "claim_payout": "支払いを請求",
+    "settings": "設定",
+    "overview": "概要",
+    "no_organization": "組織が選択されていません",
+    "select_organization": "開始するために組織を選択してください",
+    "organization_id": "組織ID",
+    "budget": "予算",
+    "claimable_balance": "請求可能残高",
+    "address": "アドレス",
+    "amount": "金額",
+    "status": "ステータス",
+    "actions": "アクション"
+  },
+  "wallet": {
+    "connect": "ウォレット接続",
+    "connecting": "接続中...",
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "error": "ウォレット接続に失敗",
+    "install_freighter": "Freighterをインストール"
+  },
+  "language": {
+    "switcher": "言語",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語"
+  }
+}

@@ -30,6 +30,11 @@ const config: Config = {
           teal: "#00CDCC",
           light: "#E8ECF9",
         },
+        glass: {
+          surface: "rgba(255,255,255,0.12)",
+          soft: "rgba(255,255,255,0.08)",
+          border: "rgba(255,255,255,0.20)",
+        },
       },
 
       // ── Typography ───────────────────────────────────────────────────────
@@ -64,6 +69,20 @@ const config: Config = {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "hero-pattern":
           "radial-gradient(ellipse at top, #7B61FF22 0%, transparent 60%), radial-gradient(ellipse at bottom right, #00CDCC11 0%, transparent 60%)",
+      },
+
+      // ── Glassmorphism Utilities ────────────────────────────────────────────
+      blur: {
+        xs: "2px",
+        md: "18px",
+        glass: "24px",
+      },
+      backgroundOpacity: {
+        5: "0.05",
+        7: "0.07",
+        12: "0.12",
+        18: "0.18",
+        24: "0.24",
       },
     },
   },

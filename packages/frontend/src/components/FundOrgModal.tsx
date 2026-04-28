@@ -15,13 +15,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFreighter } from "@/hooks/useFreighter";
+import { useUnifiedWallet } from "@/hooks/useUnifiedWallet";
 import {
   buildFundOrgTransaction,
   submitSignedTransaction,
   readAccountXlmBalance,
 } from "@/lib/sorobanClient";
 import { FaucetBanner, type BalanceStatus } from "@/components/FaucetBanner";
+import { GlassPanel } from "@/components/GlassPanel";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ interface FundOrgModalProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
-  const { isConnected, publicKey, signTransaction } = useFreighter();
+  const { isConnected, publicKey, signTransaction } = useUnifiedWallet();
 
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,7 +118,7 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
       // Allow clicking the backdrop to close (unless a tx is in flight)
       onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
     >
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+      <GlassPanel className="relative w-full max-w-md overflow-hidden p-8 shadow-2xl backdrop-blur-xl border-white/10 bg-white/5">
         {/* Background glow orbs */}
         <div className="pointer-events-none absolute -left-24 -top-24 h-48 w-48 rounded-full bg-stellar-purple/20 blur-[80px]" />
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-48 w-48 rounded-full bg-stellar-teal/20 blur-[80px]" />
@@ -252,7 +253,7 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
             </p>
           </form>
         </div>
-      </div>
+      </GlassPanel>
     </div>
   );
 }

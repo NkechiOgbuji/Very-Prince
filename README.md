@@ -79,3 +79,15 @@ To thoroughly evaluate the Wave 4 grant capabilities, follow this user journey:
 
 ---
 > *Thank you to the Drips Community for reviewing this funding milestone. See `CONTRIBUTING.md` for our open-source extension goals during Wave 4!*
+## 🗄️ Operations: Database Backups
+
+To prevent data loss, the PostgreSQL indexer database must be backed up daily. A script is provided at `scripts/backup.sh` that compresses the database to `.sql.gz` and securely transfers it to an AWS S3 bucket.
+
+**Production Server Cron Setup:**
+To execute this script automatically every day at 2:00 AM UTC, add the following to your production server's crontab (`crontab -e`):
+
+```cron
+# Run database backup daily at 02:00 AM
+0 2 * * * source /path/to/.env && /path/to/very-princess/scripts/backup.sh >> /var/log/very-princess-backup.log 2>&1
+```
+Note: Ensure PGUSER, PGPASSWORD, PGDATABASE, and BACKUP_S3_BUCKET are set in the environment where the cron job executes, and that the AWS CLI is configured with the correct IAM roles.

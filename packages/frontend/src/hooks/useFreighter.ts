@@ -30,10 +30,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useWallet } from "@/contexts/WalletContext";
 import {
-  isConnected as freighterIsConnected,
-  getPublicKey,
-  signTransaction as freighterSignTransaction,
   isAllowed,
   setAllowed,
 } from "@stellar/freighter-api";
@@ -70,30 +68,38 @@ export interface FreighterState {
 
 /**
  * Returns the current Freighter wallet state and interaction callbacks.
+ * This hook now uses the centralized WalletContext for better state management.
  */
 export function useFreighter(): FreighterState {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  const {
+    isConnected,
+    publicKey,
+    isLoading,
+    error,
+    network,
+    connectWallet,
+    disconnectWallet,
+    signTransaction: signTx,
+  } = useWallet();
 
   // ── Detect Freighter on mount ─────────────────────────────────────────────
 
   useEffect(() => {
     const checkFreighter = async () => {
       try {
-        const connected = await freighterIsConnected();
-        setIsInstalled(connected !== undefined);
+        // Check if Freighter is installed
+        const freighterExists = await (window as any).freighter?.isConnected();
+        setIsInstalled(freighterExists !== undefined);
 
-        if (connected) {
+        if (freighterExists) {
           // Check if this site is already allowed without another prompt.
           const allowed = await isAllowed();
-          if (allowed) {
-            const pk = await getPublicKey();
-            setPublicKey(pk ?? null);
-            setIsConnected(!!pk);
+          if (!allowed && isConnected) {
+            // If we're connected but not allowed, we might need to re-establish permission
+            await setAllowed();
           }
         }
       } catch {
@@ -105,14 +111,11 @@ export function useFreighter(): FreighterState {
     };
 
     void checkFreighter();
-  }, []);
+  }, [isConnected]);
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
     try {
       if (!isInstalled) {
         throw new Error(
@@ -122,68 +125,31 @@ export function useFreighter(): FreighterState {
 
       // Grant this site permission to read the public key.
       await setAllowed();
-
-      const pk = await getPublicKey();
-
-      if (!pk) {
-        throw new Error("Failed to retrieve public key from Freighter.");
-      }
-
-      setPublicKey(pk);
-      setIsConnected(true);
+      
+      // Use the centralized connectWallet function
+      await connectWallet();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      setError(message);
-      setIsConnected(false);
-      setPublicKey(null);
-    } finally {
-      setIsLoading(false);
+      // Error handling is now managed by the wallet context
+      throw new Error(message);
     }
-  }, [isInstalled]);
+  }, [isInstalled, connectWallet]);
 
   // ── Disconnect ────────────────────────────────────────────────────────────
 
   const disconnect = useCallback(() => {
-    // Freighter does not expose a programmatic revoke API yet.
-    // We clear local state — the user can manually disconnect in the extension.
-    setIsConnected(false);
-    setPublicKey(null);
-    setError(null);
-  }, []);
+    // Use the centralized disconnectWallet function
+    disconnectWallet();
+  }, [disconnectWallet]);
 
   // ── Sign Transaction ──────────────────────────────────────────────────────
 
   const signTransaction = useCallback(
     async (transactionXdr: string): Promise<string> => {
-      if (!isConnected || !publicKey) {
-        throw new Error("Wallet is not connected. Call connect() first.");
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const signedTxXdr = await freighterSignTransaction(transactionXdr, {
-            network: "TESTNET",
-            networkPassphrase:
-              process.env["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
-              "Test SDF Network ; September 2015",
-          });
-
-        if (!signedTxXdr) {
-          throw new Error("Signing was rejected or failed.");
-        }
-
-        return signedTxXdr;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        setError(message);
-        throw new Error(message);
-      } finally {
-        setIsLoading(false);
-      }
+      // Use the centralized signTransaction function from wallet context
+      return await signTx(transactionXdr);
     },
-    [isConnected, publicKey]
+    [signTx]
   );
 
   return {

@@ -1,134 +1,122 @@
 #!/usr/bin/env bash
+
 # =============================================================================
 # very-princess — Soroban Contract Deploy Script
 # =============================================================================
-# This script builds the PayoutRegistry contract and deploys it to the Stellar
-# Testnet. After a successful deployment, the CONTRACT_ID is written to the
-# root .env.contracts file so that the backend and frontend can read it.
-#
-# Prerequisites:
-#   - Rust + wasm32 target:  rustup target add wasm32-unknown-unknown
-#   - Stellar CLI (>=21):    cargo install stellar-cli --locked --features opt
-#   - Funded Testnet account: https://developers.stellar.org/network/testnet/get-started
-#
-# Usage:
-#   export DEPLOYER_SECRET="S..."   # Your Testnet secret key
-#   chmod +x scripts/deploy.sh
-#   ./scripts/deploy.sh
+# This script builds, optimizes, and deploys the PayoutRegistry contract.
+# It then updates the .env files in the backend and frontend packages.
 # =============================================================================
 
-set -euo pipefail
+set -e
 
 # ── Colour helpers ──────────────────────────────────────────────────────────
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
 NC='\033[0m' # No Colour
 
 log()  { echo -e "${CYAN}[deploy]${NC} $*"; }
 ok()   { echo -e "${GREEN}[deploy]${NC} ✓ $*"; }
-warn() { echo -e "${YELLOW}[deploy]${NC} ⚠ $*"; }
 err()  { echo -e "${RED}[deploy]${NC} ✗ $*" >&2; exit 1; }
 
 # ── Configuration ───────────────────────────────────────────────────────────
 
 # Resolve the repo root regardless of where this script is called from.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTRACTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(cd "${CONTRACTS_DIR}/../.." && pwd)"
+CONTRACT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${CONTRACT_DIR}/../.." && pwd)"
 
-# Output artefacts.
-WASM_PATH="${CONTRACTS_DIR}/target/wasm32-unknown-unknown/release/very_princess_contracts.wasm"
-ENV_CONTRACTS_FILE="${REPO_ROOT}/.env.contracts"
+BACKEND_ENV="${REPO_ROOT}/packages/backend/.env"
+FRONTEND_ENV="${REPO_ROOT}/packages/frontend/.env.local"
 
-# Stellar Testnet defaults — override via environment variables if needed.
 NETWORK="${NETWORK:-testnet}"
-RPC_URL="${RPC_URL:-https://soroban-testnet.stellar.org}"
-NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
+# Use a pre-funded CLI identity. Default to 'default' if not provided.
+IDENTITY="${IDENTITY:-default}"
 
 # ── Validate Prerequisites ──────────────────────────────────────────────────
 
 log "Validating prerequisites..."
 
-if ! command -v stellar &>/dev/null; then
-  err "Stellar CLI not found. Install: cargo install stellar-cli --locked --features opt"
+if ! command -v soroban &>/dev/null; then
+    err "soroban CLI not found. Install: cargo install soroban-cli"
 fi
 
-if [[ -z "${DEPLOYER_SECRET:-}" ]]; then
-  err "DEPLOYER_SECRET is not set. Export your funded Testnet secret key and retry."
+if ! command -v cargo &>/dev/null; then
+    err "cargo not found. Install Rust: https://rustup.rs/"
 fi
-
-ok "Prerequisites satisfied."
 
 # ── Step 1: Build the contract ──────────────────────────────────────────────
 
-log "Building PayoutRegistry contract (optimised WASM)..."
+log "Building contract with cargo..."
+cd "${CONTRACT_DIR}"
+cargo build --target wasm32-unknown-unknown --release
 
-(
-  cd "${CONTRACTS_DIR}"
-  stellar contract build --profile release
-)
+WASM_PATH="target/wasm32-unknown-unknown/release/very_princess_contracts.wasm"
 
 if [[ ! -f "${WASM_PATH}" ]]; then
-  err "WASM build artefact not found at: ${WASM_PATH}"
+    err "WASM build artefact not found at: ${WASM_PATH}"
 fi
 
-WASM_SIZE=$(stat -c%s "${WASM_PATH}" 2>/dev/null || stat -f%z "${WASM_PATH}")
-ok "Contract built — ${WASM_SIZE} bytes at ${WASM_PATH}"
+# ── Step 2: Optimize the WASM ───────────────────────────────────────────────
 
-# ── Step 2: Configure Stellar CLI network ──────────────────────────────────
+log "Optimizing WASM..."
+soroban contract optimize --wasm "${WASM_PATH}"
 
-log "Configuring Stellar CLI for network: ${NETWORK} (${RPC_URL})"
+OPTIMIZED_WASM_PATH="target/wasm32-unknown-unknown/release/very_princess_contracts.optimized.wasm"
 
-stellar network add "${NETWORK}" \
-  --rpc-url "${RPC_URL}" \
-  --network-passphrase "${NETWORK_PASSPHRASE}" \
-  2>/dev/null || warn "Network '${NETWORK}' already configured — continuing."
+if [[ ! -f "${OPTIMIZED_WASM_PATH}" ]]; then
+    err "Optimized WASM not found at: ${OPTIMIZED_WASM_PATH}"
+fi
 
-# ── Step 3: Import deployer identity ───────────────────────────────────────
+# ── Step 3: Deploy to Testnet ───────────────────────────────────────────────
 
-IDENTITY_NAME="very-princess-deployer"
-log "Importing deployer keypair as identity '${IDENTITY_NAME}'..."
-
-stellar keys add "${IDENTITY_NAME}" \
-  --secret-key "${DEPLOYER_SECRET}" \
-  2>/dev/null || warn "Identity '${IDENTITY_NAME}' already exists — overwriting."
-
-stellar keys add "${IDENTITY_NAME}" --secret-key "${DEPLOYER_SECRET}" 2>/dev/null || true
-
-DEPLOYER_ADDRESS=$(stellar keys address "${IDENTITY_NAME}")
-log "Deployer address: ${DEPLOYER_ADDRESS}"
-
-# ── Step 4: Deploy to Testnet ───────────────────────────────────────────────
-
-log "Deploying PayoutRegistry to Stellar ${NETWORK}..."
-
-CONTRACT_ID=$(stellar contract deploy \
-  --wasm "${WASM_PATH}" \
-  --source "${IDENTITY_NAME}" \
-  --network "${NETWORK}")
+log "Deploying to ${NETWORK} using identity '${IDENTITY}'..."
+CONTRACT_ID=$(soroban contract deploy \
+    --wasm "${OPTIMIZED_WASM_PATH}" \
+    --source "${IDENTITY}" \
+    --network "${NETWORK}")
 
 if [[ -z "${CONTRACT_ID}" ]]; then
-  err "Deployment failed — no contract ID returned."
+    err "Deployment failed — no contract ID returned."
 fi
 
 ok "Contract deployed! CONTRACT_ID=${CONTRACT_ID}"
 
-# ── Step 5: Persist contract ID ─────────────────────────────────────────────
+# ── Step 4: Update environment files ────────────────────────────────────────
 
-log "Writing CONTRACT_ID to ${ENV_CONTRACTS_FILE}..."
+log "Updating environment files..."
 
-# Write (or overwrite) the file — this is read by backend and frontend at startup.
-cat > "${ENV_CONTRACTS_FILE}" <<EOF
-# Auto-generated by packages/contracts/scripts/deploy.sh
-# DO NOT edit manually — re-run deploy.sh to update.
-# Network: ${NETWORK} | Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-CONTRACT_ID=${CONTRACT_ID}
-DEPLOYER_ADDRESS=${DEPLOYER_ADDRESS}
-EOF
+update_env() {
+    local file=$1
+    local key=$2
+    local value=$3
+    
+    # Ensure directory exists
+    mkdir -p "$(dirname "$file")"
+    
+    if [ -f "$file" ]; then
+        if grep -q "^$key=" "$file"; then
+            # Update existing key
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^$key=.*|$key=$value|" "$file"
+            else
+                sed -i "s|^$key=.*|$key=$value|" "$file"
+            fi
+        else
+            # Append new key
+            echo "$key=$value" >> "$file"
+        fi
+    else
+        # Create new file
+        echo "$key=$value" > "$file"
+    fi
+}
 
-ok "Saved to ${ENV_CONTRACTS_FILE}"
+update_env "${BACKEND_ENV}" "CONTRACT_ID" "${CONTRACT_ID}"
+update_env "${FRONTEND_ENV}" "NEXT_PUBLIC_CONTRACT_ID" "${CONTRACT_ID}"
+
+ok "Updated ${BACKEND_ENV}"
+ok "Updated ${FRONTEND_ENV}"
 
 # ── Done ────────────────────────────────────────────────────────────────────
 
@@ -137,12 +125,7 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  Deployment complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "  Contract ID   : ${CYAN}${CONTRACT_ID}${NC}"
-echo -e "  Network       : ${CYAN}${NETWORK}${NC}"
-echo -e "  Deployer      : ${CYAN}${DEPLOYER_ADDRESS}${NC}"
-echo -e "  Stellar Expert : ${CYAN}https://testnet.stellar.expert/explorer/testnet/contract/${CONTRACT_ID}${NC}"
-echo ""
-echo "  Next steps:"
-echo "    1. Copy .env.example → .env and set CONTRACT_ID=${CONTRACT_ID}"
-echo "    2. Run: npm run dev"
+echo -e "  Contract ID : ${CYAN}${CONTRACT_ID}${NC}"
+echo -e "  Network     : ${CYAN}${NETWORK}${NC}"
+echo -e "  Identity    : ${CYAN}${IDENTITY}${NC}"
 echo ""

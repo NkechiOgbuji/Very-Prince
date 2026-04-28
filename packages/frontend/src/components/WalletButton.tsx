@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useFreighter } from "@/hooks/useFreighter";
+import { useUnifiedWallet } from "@/hooks/useUnifiedWallet";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ function truncateAddress(address: string): string {
  */
 export function WalletButton() {
   const { isInitialized, isInstalled, isConnected, publicKey, isLoading, connect, disconnect, error } =
-    useFreighter();
+    useUnifiedWallet();
 
   // Show a neutral placeholder while we detect Freighter.
   if (!isInitialized) {

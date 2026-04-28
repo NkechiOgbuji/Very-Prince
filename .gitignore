@@ -43,3 +43,5 @@ coverage/
 *.wasm
 .soroban/
 identity.json
+
+AGENTS.md

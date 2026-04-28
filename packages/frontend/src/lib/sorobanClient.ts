@@ -113,6 +113,21 @@ class SorobanClient {
       admin: String(map["admin"]),
     };
   }
+/**
+ * Read a registered organization from the PayoutRegistry.
+ *
+ * @param orgId — Short Symbol ID of the organization (max 9 chars).
+ */
+export async function readOrganization(orgId: string): Promise<Organization> {
+  const raw = await simulateContractCall("get_org", [orgId]);
+  const map = raw as Record<string, unknown>;
+  return {
+    id: String(map["id"]),
+    name: String(map["name"]),
+    admin: String(map["admin"]),
+    metadataCid: map["metadata_cid"] ? String(map["metadata_cid"]) : undefined,
+  };
+}
 
   public async readMaintainers(orgId: string): Promise<string[]> {
     const raw = await this._simulateContractCall("get_maintainers", [orgId]);
@@ -219,6 +234,93 @@ class SorobanClient {
     if (sendResult.status === "ERROR") {
       throw new Error(`Send error: ${JSON.stringify(sendResult)}`);
     }
+/**
+ * Build, simulate, and prepare an unsigned XDR for `allocate_payout`.
+ */
+export async function buildAllocatePayoutTransaction(
+  adminAddress: string,
+  orgId: string,
+  maintainerAddress: string,
+  amountStroops: bigint
+): Promise<string> {
+  const account = await loadAccount(adminAddress);
+  const contract = new Contract(CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      // @ts-ignore
+      contract.call("allocate_payout",
+        nativeToScVal(orgId, { type: "symbol" }),
+        nativeToScVal(maintainerAddress, { type: "address" }),
+        nativeToScVal(amountStroops, { type: "i128" }),
+        nativeToScVal(0, { type: "u64" })
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const simResult = await rpcServer.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(simResult)) {
+    throw new Error(`Simulation failed: ${simResult.error}`);
+  }
+
+  const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
+  return preparedTx.toXDR();
+}
+
+/**
+ * Build, simulate, and prepare an unsigned XDR for `update_org_metadata`.
+ * 
+ * @param adminAddress - The admin's public key.
+ * @param orgId - Organization ID.
+ * @param metadataCid - The new IPFS CID.
+ */
+export async function buildUpdateOrgMetadataTransaction(
+  adminAddress: string,
+  orgId: string,
+  metadataCid: string
+): Promise<string> {
+  const account = await loadAccount(adminAddress);
+  const contract = new Contract(CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      // @ts-ignore
+      contract.call("update_org_metadata",
+        nativeToScVal(orgId, { type: "symbol" }),
+        nativeToScVal(metadataCid, { type: "string" })
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  const simResult = await rpcServer.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(simResult)) {
+    throw new Error(`Simulation failed: ${simResult.error}`);
+  }
+
+  const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
+  return preparedTx.toXDR();
+}
+
+/**
+ * Submit a signed transaction to Soroban RPC and wait for confirmation.
+ * @param signedXdr — Base64 string from Freighter.
+ */
+export async function submitSignedTransaction(signedXdr: string): Promise<unknown> {
+  const tx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
+  
+  // Submit the transaction
+  const sendResult = await rpcServer.sendTransaction(tx as any);
+  if (sendResult.status === "ERROR") {
+    throw new Error(`Send error: ${JSON.stringify(sendResult)}`);
+  }
 
     return new Promise((resolve, reject) => {
       let attempts = 0;
