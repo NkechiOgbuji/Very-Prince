@@ -1,16 +1,15 @@
 /**
  * @file sorobanClient.ts
- * @description Browser-side Soroban RPC client for reading PayoutRegistry state.
+ * @description Browser-side service for interacting with the Soroban RPC and Horizon.
  *
- * This module provides read-only contract interaction utilities for the Next.js
- * frontend. It uses `simulateTransaction` (no fees, no signing required) to
- * fetch on-chain state.
+ * This service centralizes all Stellar network interactions for the frontend.
+ * It provides methods for both read-only contract calls (simulations) and
+ * for building write transactions that can be signed by a wallet (e.g., Freighter).
  *
- * Write operations (allocate/claim) are routed through the backend API to avoid
- * exposing secret keys in the browser. Freighter is used for transaction signing
- * via the `useFreighter` hook.
+ * It encapsulates the `stellar-sdk`'s `SorobanRpc.Server` and `Horizon.Server`
+ * instances, ensuring they are configured and used consistently.
  *
- * ## Adding New Read Operations
+ * ## Adding New Operations
  *
  * 1. Identify the contract function name (e.g. `get_org`).
  * 2. Build the argument list using `nativeToScVal`.
@@ -45,265 +44,226 @@ const NETWORK_PASSPHRASE =
 
 const CONTRACT_ID = process.env["NEXT_PUBLIC_CONTRACT_ID"] ?? "";
 
-// ─── RPC Server Singleton ─────────────────────────────────────────────────────
-
 /**
- * Soroban RPC server instance.
- * Instantiated once and reused across all calls to avoid unnecessary overhead.
+ * A service class that provides a centralized client for interacting with
+ * the Stellar network (Soroban RPC and Horizon).
  */
-const rpcServer = new SorobanRpc.Server(RPC_URL, { allowHttp: false });
-const horizonServer = new Horizon.Server(HORIZON_URL, { allowHttp: false });
+class SorobanClient {
+  private readonly rpcServer: SorobanRpc.Server;
+  private readonly horizonServer: Horizon.Server;
 
-// ─── Simulation Helper ────────────────────────────────────────────────────────
-
-/**
- * Simulate a read-only contract call and return the raw ScVal result.
- *
- * We use a randomly-generated throwaway keypair as the "source" of the
- * simulation envelope. Simulation does not submit a real transaction, so
- * the source account doesn't need to exist or be funded.
- */
-async function simulateContractCall(
-  functionName: string,
-  args: Parameters<typeof nativeToScVal>[0][]
-): Promise<ReturnType<typeof scValToNative>> {
-  if (!CONTRACT_ID) {
-    throw new Error(
-      "NEXT_PUBLIC_CONTRACT_ID is not set. Deploy the contract first."
-    );
+  constructor() {
+    this.rpcServer = new SorobanRpc.Server(RPC_URL, {
+      allowHttp: RPC_URL.startsWith("http://"),
+    });
+    this.horizonServer = new Horizon.Server(HORIZON_URL, {
+      allowHttp: HORIZON_URL.startsWith("http://"),
+    });
   }
 
-  // Throwaway source for simulation envelope only.
-  const fakeKeypair = Keypair.random();
-  const contract = new Contract(CONTRACT_ID);
+  // ─── Simulation Helper ────────────────────────────────────────────────────────
 
-  // Provide a minimal account object for TransactionBuilder.
-  const fakeAccount = {
-    accountId: () => fakeKeypair.publicKey(),
-    sequenceNumber: () => "0",
-    incrementSequenceNumber: () => {},
-  };
+  private async _simulateContractCall(
+    functionName: string,
+    args: Parameters<typeof nativeToScVal>[0][]
+  ): Promise<ReturnType<typeof scValToNative>> {
+    if (!CONTRACT_ID) {
+      throw new Error("NEXT_PUBLIC_CONTRACT_ID is not set. Deploy the contract first.");
+    }
 
-  const tx = new TransactionBuilder(
-    // @ts-ignore — minimal account duck-typing is sufficient for simulation
-    fakeAccount,
-    { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE }
-  )
-    .addOperation(
-      // @ts-ignore — call() accepts string args
-      contract.call(functionName, ...args.map((a) => nativeToScVal(a)))
+    const fakeKeypair = Keypair.random();
+    const contract = new Contract(CONTRACT_ID);
+
+    const fakeAccount = {
+      accountId: () => fakeKeypair.publicKey(),
+      sequenceNumber: () => "0",
+      incrementSequenceNumber: () => {},
+    };
+
+    const tx = new TransactionBuilder(
+      // @ts-ignore — minimal account duck-typing is sufficient for simulation
+      fakeAccount,
+      { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE }
     )
-    .setTimeout(30)
-    .build();
-
-  const simResult = await rpcServer.simulateTransaction(tx);
-
-  if (SorobanRpc.Api.isSimulationError(simResult)) {
-    throw new Error(`Contract simulation failed: ${simResult.error}`);
-  }
-
-  // @ts-ignore — returnVal present on success result
-  return scValToNative(simResult.result?.retval);
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Read a registered organization from the PayoutRegistry.
- *
- * @param orgId — Short Symbol ID of the organization (max 9 chars).
- */
-export async function readOrganization(orgId: string): Promise<Organization> {
-  const raw = await simulateContractCall("get_org", [orgId]);
-  const map = raw as Record<string, unknown>;
-  return {
-    id: String(map["id"]),
-    name: String(map["name"]),
-    admin: String(map["admin"]),
-  };
-}
-
-/**
- * Read the list of maintainer addresses for an organization.
- *
- * @param orgId — Short Symbol ID of the organization.
- * @returns Array of Stellar public key strings.
- */
-export async function readMaintainers(orgId: string): Promise<string[]> {
-  const raw = await simulateContractCall("get_maintainers", [orgId]);
-  return Array.isArray(raw) ? (raw as string[]) : [];
-}
-
-/**
- * Read the claimable balance for a maintainer address.
- *
- * @param address — Stellar public key (G...) of the maintainer.
- */
-export async function readClaimableBalance(
-  address: string
-): Promise<MaintainerBalance> {
-  const raw = await simulateContractCall("get_claimable_balance", [address]);
-  const stroops = BigInt(raw as number);
-  const xlm = (Number(stroops) / 10_000_000).toFixed(7);
-  return { address, stroops, xlm };
-}
-
-/**
- * Read the total budget for an organization.
- * @param orgId - Symbol ID of the organization.
- */
-export async function readOrgBudget(orgId: string): Promise<Pick<MaintainerBalance, "stroops" | "xlm">> {
-  const raw = await simulateContractCall("get_org_budget", [orgId]);
-  const stroops = BigInt(raw as number);
-  const xlm = (Number(stroops) / 10_000_000).toFixed(7);
-  return { stroops, xlm };
-}
-
-/**
- * Read the native XLM balance for a connected wallet address via Horizon.
- *
- * Returns `null` when the account doesn't exist on the network (i.e. it has
- * never been funded — Horizon returns 404 for unfunded addresses).
- *
- * @param address — Stellar public key (G...).
- * @returns XLM balance as a number, or null if unfunded / not found.
- */
-export async function readAccountXlmBalance(address: string): Promise<number | null> {
-  try {
-    const account = await horizonServer.loadAccount(address);
-    const nativeLine = account.balances.find(
-      (b): b is typeof b & { asset_type: "native" } => b.asset_type === "native"
-    );
-    return nativeLine ? parseFloat(nativeLine.balance) : 0;
-  } catch {
-    // Horizon returns 404 for accounts that have never been funded.
-    // This is expected for brand-new testnet wallets.
-    return null;
-  }
-}
-
-// ─── Write API (Transaction Builders) ──────────────────────────────────────────
-
-/**
- * Helper to fetch a real account from Horizon to build a transaction.
- */
-async function loadAccount(publicKey: string) {
-  try {
-    return await horizonServer.loadAccount(publicKey);
-  } catch (err) {
-    throw new Error(`Failed to load account from network. Ensure ${publicKey} is funded on Testnet.`);
-  }
-}
-
-/**
- * Build, simulate, and prepare an unsigned XDR for `fund_org`.
- *
- * @param orgId — Organization ID.
- * @param fromAddress — The user's public key connected via Freighter.
- * @param amountStroops — Amount to fund in stroops.
- * @returns Base64 encoded unsigned transaction XDR string.
- */
-export async function buildFundOrgTransaction(
-  orgId: string,
-  fromAddress: string,
-  amountStroops: bigint
-): Promise<string> {
-  const account = await loadAccount(fromAddress);
-  const contract = new Contract(CONTRACT_ID);
-
-  const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
-    networkPassphrase: NETWORK_PASSPHRASE,
-  })
-    .addOperation(
-      // @ts-ignore
-      contract.call("fund_org",
-        nativeToScVal(orgId),
-        nativeToScVal(fromAddress),
-        nativeToScVal(amountStroops, { type: "i128" })
+      .addOperation(
+        // @ts-ignore — call() accepts string args
+        contract.call(functionName, ...args.map((a) => nativeToScVal(a)))
       )
-    )
-    .setTimeout(60)
-    .build();
+      .setTimeout(30)
+      .build();
 
-  const simResult = await rpcServer.simulateTransaction(tx);
-  if (SorobanRpc.Api.isSimulationError(simResult)) {
-    throw new Error(`Simulation failed: ${simResult.error}`);
+    const simResult = await this.rpcServer.simulateTransaction(tx);
+
+    if (SorobanRpc.Api.isSimulationError(simResult)) {
+      throw new Error(`Contract simulation failed: ${simResult.error}`);
+    }
+
+    // @ts-ignore — returnVal present on success result
+    return scValToNative(simResult.result?.retval);
   }
 
-  // Combine auth footprint into final unsigned transaction
-  const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
-  return preparedTx.toXDR();
-}
+  // ─── Public Read API ───────────────────────────────────────────────────────────
 
-/**
- * Build, simulate, and prepare an unsigned XDR for `claim_payout`.
- *
- * @param userAddress — The maintainer's public key.
- * @returns Base64 encoded unsigned transaction XDR string.
- */
-export async function buildClaimPayoutTransaction(userAddress: string): Promise<string> {
-  const account = await loadAccount(userAddress);
-  const contract = new Contract(CONTRACT_ID);
+  public async readOrganization(orgId: string): Promise<Organization> {
+    const raw = await this._simulateContractCall("get_org", [orgId]);
+    const map = raw as Record<string, unknown>;
+    return {
+      id: String(map["id"]),
+      name: String(map["name"]),
+      admin: String(map["admin"]),
+    };
+  }
 
-  const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
-    networkPassphrase: NETWORK_PASSPHRASE,
-  })
-    .addOperation(
-      // @ts-ignore
-      contract.call("claim_payout",
-        nativeToScVal(userAddress)
+  public async readMaintainers(orgId: string): Promise<string[]> {
+    const raw = await this._simulateContractCall("get_maintainers", [orgId]);
+    return Array.isArray(raw) ? (raw as string[]) : [];
+  }
+
+  public async readClaimableBalance(address: string): Promise<MaintainerBalance> {
+    const raw = await this._simulateContractCall("get_claimable_balance", [address]);
+    const stroops = BigInt(raw as number);
+    const xlm = (Number(stroops) / 10_000_000).toFixed(7);
+    return { address, stroops, xlm };
+  }
+
+  public async readOrgBudget(orgId: string): Promise<Pick<MaintainerBalance, "stroops" | "xlm">> {
+    const raw = await this._simulateContractCall("get_org_budget", [orgId]);
+    const stroops = BigInt(raw as number);
+    const xlm = (Number(stroops) / 10_000_000).toFixed(7);
+    return { stroops, xlm };
+  }
+
+  public async readAccountXlmBalance(address: string): Promise<number | null> {
+    try {
+      const account = await this.horizonServer.loadAccount(address);
+      const nativeLine = account.balances.find(
+        (b): b is typeof b & { asset_type: "native" } => b.asset_type === "native"
+      );
+      return nativeLine ? parseFloat(nativeLine.balance) : 0;
+    } catch {
+      return null;
+    }
+  }
+
+  // ─── Write API (Transaction Builders) ───────────────────────────────────────
+
+  private async _loadAccount(publicKey: string) {
+    try {
+      return await this.horizonServer.loadAccount(publicKey);
+    } catch (err) {
+      throw new Error(`Failed to load account from network. Ensure ${publicKey} is funded on Testnet.`);
+    }
+  }
+
+  public async buildFundOrgTransaction(
+    orgId: string,
+    fromAddress: string,
+    amountStroops: bigint
+  ): Promise<string> {
+    const account = await this._loadAccount(fromAddress);
+    const contract = new Contract(CONTRACT_ID);
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        // @ts-ignore
+        contract.call(
+          "fund_org",
+          nativeToScVal(orgId),
+          nativeToScVal(fromAddress),
+          nativeToScVal(amountStroops, { type: "i128" })
+        )
       )
-    )
-    .setTimeout(60)
-    .build();
+      .setTimeout(60)
+      .build();
 
-  const simResult = await rpcServer.simulateTransaction(tx);
-  if (SorobanRpc.Api.isSimulationError(simResult)) {
-    throw new Error(`Simulation failed: ${simResult.error}`);
+    const simResult = await this.rpcServer.simulateTransaction(tx);
+    if (SorobanRpc.Api.isSimulationError(simResult)) {
+      throw new Error(`Simulation failed: ${simResult.error}`);
+    }
+
+    const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
+    return preparedTx.toXDR();
   }
 
-  const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
-  return preparedTx.toXDR();
-}
+  public async buildClaimPayoutTransaction(userAddress: string): Promise<string> {
+    const account = await this._loadAccount(userAddress);
+    const contract = new Contract(CONTRACT_ID);
 
-/**
- * Submit a signed transaction to Soroban RPC and wait for confirmation.
- * @param signedXdr — Base64 string from Freighter.
- */
-export async function submitSignedTransaction(signedXdr: string): Promise<unknown> {
-  const tx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
-  
-  // Submit the transaction
-  const sendResult = await rpcServer.sendTransaction(tx as any);
-  if (sendResult.status === "ERROR") {
-    throw new Error(`Send error: ${JSON.stringify(sendResult)}`);
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(
+        // @ts-ignore
+        contract.call("claim_payout", nativeToScVal(userAddress))
+      )
+      .setTimeout(60)
+      .build();
+
+    const simResult = await this.rpcServer.simulateTransaction(tx);
+    if (SorobanRpc.Api.isSimulationError(simResult)) {
+      throw new Error(`Simulation failed: ${simResult.error}`);
+    }
+
+    const preparedTx = SorobanRpc.assembleTransaction(tx, simResult).build();
+    return preparedTx.toXDR();
   }
 
-  // Poll for completion
-  return new Promise((resolve, reject) => {
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
-      if (attempts > 30) {
-        clearInterval(interval);
-        return reject(new Error("Transaction confirmation timed out."));
-      }
+  public async submitSignedTransaction(signedXdr: string): Promise<unknown> {
+    const tx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
 
-      try {
-        const getTxResponse = await rpcServer.getTransaction(sendResult.hash);
-        if (getTxResponse.status === "SUCCESS") {
+    const sendResult = await this.rpcServer.sendTransaction(tx as any);
+    if (sendResult.status === "ERROR") {
+      throw new Error(`Send error: ${JSON.stringify(sendResult)}`);
+    }
+
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const interval = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) {
           clearInterval(interval);
-          resolve(scValToNative(getTxResponse.returnValue as any));
-        } else if (getTxResponse.status === "FAILED") {
-          clearInterval(interval);
-          reject(new Error(`Transaction failed on ledger`));
+          return reject(new Error("Transaction confirmation timed out."));
         }
-        // NOT_FOUND means we keep waiting
-      } catch (err) {
-        // network issue, keep polling
-      }
-    }, 2000);
-  });
+
+        try {
+          const getTxResponse = await this.rpcServer.getTransaction(sendResult.hash);
+          if (getTxResponse.status === "SUCCESS") {
+            clearInterval(interval);
+            resolve(scValToNative(getTxResponse.returnValue as any));
+          } else if (getTxResponse.status === "FAILED") {
+            clearInterval(interval);
+            reject(new Error(`Transaction failed on ledger`));
+          }
+        } catch (err) {
+          // network issue, keep polling
+        }
+      }, 2000);
+    });
+  }
 }
+
+// ─── Singleton Export ───────────────────────────────────────────────────────────
+
+/**
+ * A singleton instance of the SorobanClient.
+ * Components and hooks should import this instance directly for new code.
+ */
+export const sorobanClient = new SorobanClient();
+
+// ─── Backward-Compatibility Exports ───────────────────────────────────────────
+// To avoid breaking existing imports, we also export the methods as standalone
+// functions. New code should prefer using the `sorobanClient` instance.
+
+export const readOrganization = sorobanClient.readOrganization.bind(sorobanClient);
+export const readMaintainers = sorobanClient.readMaintainers.bind(sorobanClient);
+export const readClaimableBalance = sorobanClient.readClaimableBalance.bind(sorobanClient);
+export const readOrgBudget = sorobanClient.readOrgBudget.bind(sorobanClient);
+export const readAccountXlmBalance = sorobanClient.readAccountXlmBalance.bind(sorobanClient);
+export const buildFundOrgTransaction = sorobanClient.buildFundOrgTransaction.bind(sorobanClient);
+export const buildClaimPayoutTransaction =
+  sorobanClient.buildClaimPayoutTransaction.bind(sorobanClient);
+export const submitSignedTransaction = sorobanClient.submitSignedTransaction.bind(sorobanClient);
