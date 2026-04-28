@@ -7,11 +7,15 @@
         "sourceType": "module"
     },
     "plugins": [
-        "@typescript-eslint"
+        "@typescript-eslint",
+        "sonarjs",
+        "security"
     ],
     "extends": [
         "eslint:recommended",
-        "plugin:@typescript-eslint/recommended"
+        "plugin:@typescript-eslint/recommended",
+        "plugin:sonarjs/recommended",
+        "plugin:security/recommended-legacy"
     ],
     "env": {
         "node": true,
@@ -24,7 +28,12 @@
             {
                 "argsIgnorePattern": "^_"
             }
-        ]
+        ],
+        "sonarjs/cognitive-complexity": ["warn", 15],
+        "sonarjs/no-duplicate-string": ["warn", { "threshold": 5 }],
+        "security/detect-object-injection": "warn",
+        "security/detect-non-literal-regexp": "warn",
+        "security/detect-unsafe-regex": "error"
     },
     "ignorePatterns": [
         "dist/",

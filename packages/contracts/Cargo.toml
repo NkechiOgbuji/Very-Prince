@@ -19,6 +19,7 @@ soroban-sdk = { version = "21.0.0" }
 # The "testutils" feature unlocks Address::generate(), mock_all_auths(), etc.
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+proptest = "1.6.0"
 
 # ── Release Profile ───────────────────────────────────────────────────────────
 # These settings minimise WASM binary size for on-chain deployment.

@@ -9,6 +9,7 @@ export interface Org {
   id: string;
   name: string;
   admin: string;
+  publicBudget?: string; // Total public budget available in stroops
 }
 
 export interface PaginatedResponse<T> {
@@ -23,8 +24,17 @@ export interface PaginatedResponse<T> {
 /**
  * Fetch a paginated list of organizations from the backend.
  */
-export async function fetchOrganizations(page: number = 1, limit: number = 10): Promise<PaginatedResponse<Org>> {
-  const response = await fetch(`${BACKEND_URL}/orgs?page=${page}&limit=${limit}`);
+export async function fetchOrganizations(page: number = 1, limit: number = 10, search?: string): Promise<PaginatedResponse<Org>> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+  
+  if (search) {
+    params.append('search', search);
+  }
+  
+  const response = await fetch(`${BACKEND_URL}/orgs?${params}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch organizations: ${response.statusText}`);
   }

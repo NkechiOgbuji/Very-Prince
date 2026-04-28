@@ -79,7 +79,7 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
    * @example
    * GET /api/v1/contract/orgs?page=1&limit=10
    */
-  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+  fastify.get<{ Querystring: { page?: string; limit?: string; search?: string } }>(
     "/orgs",
     {
       schema: {
@@ -88,6 +88,7 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
           properties: {
             page: { type: "string", default: "1" },
             limit: { type: "string", default: "10" },
+            search: { type: "string" },
           },
         },
       },
@@ -95,7 +96,8 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const page = parseInt(request.query.page || "1", 10);
       const limit = parseInt(request.query.limit || "10", 10);
-      const result = await contractController.getOrganizations(page, limit);
+      const search = request.query.search;
+      const result = await contractController.getOrganizations(page, limit, search);
       return reply.send(result);
     }
   );
@@ -241,9 +243,15 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /orgs/:orgId/fund
    * Fund an organization's budget via SAC token transfer.
    */
-  fastify.post<{ Params: { orgId: string } }>(
-    "/orgs/:orgId/fund",
-    {
+fastify.post<{ Params: { orgId: string } }>(
+  "/orgs/:orgId/fund",
+  {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: "1 minute",
+      },
+    },
       schema: {
         // description: "Fund an organization's budget using public Stellar Asset transfers.",
         // tags: ["Organizations", "Funding"],
@@ -322,9 +330,15 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /api/v1/contract/payouts
    * Body: { orgId, maintainerAddress, amountStroops, signerSecret }
    */
-  fastify.post(
-    "/payouts",
-    {
+fastify.post(
+  "/payouts",
+  {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: "1 minute",
+      },
+    },
       schema: {
         // description: "Allocate a payout to a maintainer (org admin only).",
         // tags: ["Payouts"],
@@ -406,6 +420,76 @@ export const contractRoutes: FastifyPluginAsync = async (fastify) => {
       const nonce = Math.random().toString(36).substring(2);
       nonceCache.set(publicKey, { nonce, expiresAt: Date.now() + 1000 * 60 * 5 });
       return reply.send({ nonce });
+    }
+  );
+
+  /**
+   * POST /claim
+   * Create a claim payout transaction for a maintainer.
+   */
+  fastify.post(
+    "/claim",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["orgId", "maintainerAddress"],
+          properties: {
+            orgId: { type: "string" },
+            maintainerAddress: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { orgId, maintainerAddress } = request.body as {
+        orgId: string;
+        maintainerAddress: string;
+      };
+
+      try {
+        const transactionXdr = await contractController.createClaimTransaction(orgId, maintainerAddress);
+        return reply.send({ transactionXdr });
+      } catch (error) {
+        return reply.status(400).send({
+          error: "Failed to create claim transaction",
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /submit
+   * Submit a signed transaction to the Stellar network.
+   */
+  fastify.post(
+    "/submit",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["signedTransaction"],
+          properties: {
+            signedTransaction: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { signedTransaction } = request.body as {
+        signedTransaction: string;
+      };
+
+      try {
+        const result = await contractController.submitTransaction(signedTransaction);
+        return reply.send(result);
+      } catch (error) {
+        return reply.status(400).send({
+          error: "Failed to submit transaction",
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
     }
   );
 

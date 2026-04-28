@@ -30,6 +30,11 @@ const config: Config = {
           teal: "#00CDCC",
           light: "#E8ECF9",
         },
+        glass: {
+          surface: "rgba(255,255,255,0.12)",
+          soft: "rgba(255,255,255,0.08)",
+          border: "rgba(255,255,255,0.20)",
+        },
       },
 
       // ── Typography ───────────────────────────────────────────────────────
@@ -67,13 +72,6 @@ const config: Config = {
       },
 
       // ── Glassmorphism Utilities ────────────────────────────────────────────
-      colors: {
-        glass: {
-          surface: "rgba(255,255,255,0.12)",
-          soft: "rgba(255,255,255,0.08)",
-          border: "rgba(255,255,255,0.20)",
-        },
-      },
       blur: {
         xs: "2px",
         md: "18px",

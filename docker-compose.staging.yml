@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    environment:
+      - NODE_ENV=staging
+      - STELLAR_NETWORK=testnet
+      - RPC_URL=https://soroban-testnet.stellar.org
+      - HORIZON_URL=https://horizon-testnet.stellar.org
+      - NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/very_princess_staging
+      - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=https://very-princess-staging.vercel.app
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=very_princess_staging
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data_staging:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data_staging:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data_staging:
+  redis_data_staging:

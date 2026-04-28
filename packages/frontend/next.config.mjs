@@ -18,6 +18,9 @@ const nextConfig = {
       process.env["NEXT_PUBLIC_NETWORK_PASSPHRASE"] ??
       "Test SDF Network ; September 2015",
     NEXT_PUBLIC_CONTRACT_ID: process.env["NEXT_PUBLIC_CONTRACT_ID"] ?? "",
+    NEXT_PUBLIC_API_URL:
+      process.env["NEXT_PUBLIC_API_URL"] ??
+      "http://localhost:3001",
   },
 
   // Webpack — required so modules that use Node.js built-ins (like `stellar-sdk`)

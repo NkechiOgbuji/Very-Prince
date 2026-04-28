@@ -1,0 +1,31 @@
+import type { FastifyPluginAsync } from 'fastify';
+import { stellarService } from '../services/stellarService.js';
+
+export const profileRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get(
+    '/:address/stats',
+    {},
+    async (request, reply) => {
+      const { address } = (request.params as { address: string });
+      try {
+        const stats = await stellarService.readProfileStats(address);
+        return reply.send({
+          address: stats.address,
+          totalStroops: stats.totalStroops.toString(),
+          totalXlm: stats.totalXlm,
+          orgIds: stats.orgIds,
+          payouts: stats.payouts.map((p) => ({
+            orgId: p.orgId,
+            amountStroops: p.amountStroops.toString(),
+            ledger: p.ledger,
+            ledgerClosedAt: p.ledgerClosedAt,
+            txHash: p.txHash,
+          })),
+        });
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Failed to fetch profile stats' });
+      }
+    }
+  );
+};

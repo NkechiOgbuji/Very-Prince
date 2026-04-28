@@ -12,6 +12,7 @@ const variantStyles: Record<"primary" | "secondary", string> = {
     "border border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white",
 };
 
+
 type GlassButtonProps =
   | (AnchorHTMLAttributes<HTMLAnchorElement> & {
       variant?: "primary" | "secondary";
@@ -26,8 +27,49 @@ type GlassButtonProps =
       className?: string;
     });
 
-type PrimaryButtonProps = Omit<GlassButtonProps, "variant">;
-type SecondaryButtonProps = Omit<GlassButtonProps, "variant">;
+export function GlassButton({ variant = "primary", className, children, ...props }: GlassButtonProps) {
+  const combinedClassName = `${baseStyles} ${variantStyles[variant]} ${className || ""}`.trim();
+
+  if ("href" in props) {
+    return (
+      <a className={combinedClassName} {...(props as AnchorHTMLAttributes<HTMLAnchorElement>)}>
+        {children}
+      </a>
+    );
+  }
+
+
+
+  return (
+    <button className={combinedClassName} {...(props as ButtonHTMLAttributes<HTMLButtonElement>)}>
+      {children}
+    </button>
+  );
+}
+
+type PrimaryButtonProps =
+  | (Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className"> & {
+      href: string;
+      children: ReactNode;
+      className?: string;
+    })
+  | (Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
+      href?: undefined;
+      children: ReactNode;
+      className?: string;
+    });
+
+type SecondaryButtonProps =
+  | (Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className"> & {
+      href: string;
+      children: ReactNode;
+      className?: string;
+    })
+  | (Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
+      href?: undefined;
+      children: ReactNode;
+      className?: string;
+    });
 
 export function PrimaryButton(props: PrimaryButtonProps) {
   return <GlassButton variant="primary" {...props} />;

@@ -1,0 +1,84 @@
+{
+  "common": {
+    "loading": "Cargando...",
+    "error": "Error",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "close": "Cerrar",
+    "dashboard": "Panel de control",
+    "organizations": "Organizaciones",
+    "payouts": "Pagos",
+    "profile": "Perfil"
+  },
+  "navigation": {
+    "dashboard": "Panel de control",
+    "github": "Ver en GitHub",
+    "stellar_network": "Red Stellar",
+    "drips": "Drips"
+  },
+  "home": {
+    "title": "very-princess — Registro de Pagos Stellar",
+    "description": "Un registro de pagos descentralizado para mantenedores de código abierto, construido en Stellar Soroban. Conecta tu billetera Freighter para ver y reclamar tus pagos.",
+    "hero_title": "Registro de Pagos",
+    "hero_subtitle": "Código Abierto",
+    "hero_description": "Un sistema transparente y en cadena para pagos de mantenimiento de múltiples organizaciones. Las organizaciones se registran, asignan y los mantenedores autocustodian sus contribuciones, todo en Stellar.",
+    "open_dashboard": "Abrir Panel →",
+    "badge_text": "Construido en Stellar Soroban · Drips Wave 4",
+    "footer_text": "very-princess es código abierto — Licencia MIT"
+  },
+  "features": {
+    "on_chain": {
+      "title": "Registro en Cadena",
+      "description": "Organizaciones y mantenedores están registrados directamente en Stellar Soroban — transparente e inalterable."
+    },
+    "instant_payouts": {
+      "title": "Pagos Instantáneos",
+      "description": "Admins de org asignan pagos en cadena. Mantenedores reclaman su saldo acumulado en una sola transacción."
+    },
+    "self_custodial": {
+      "title": "Autocustodia",
+      "description": "Ningún intermediario retiene tus fondos. Reclama directamente a tu billetera Freighter — tus llaves, tu XLM."
+    },
+    "open_source": {
+      "title": "Código Abierto",
+      "description": "Construido para el modelo de financiamiento comunitario Drips. Fork, extiende, contribuye. Ver CONTRIBUTING.md."
+    }
+  },
+  "dashboard": {
+    "title": "Panel de Control",
+    "connect_wallet": "Conectar Billetera",
+    "wallet_connected": "Billetera Conectada",
+    "organizations": "Organizaciones",
+    "maintainers": "Mantenedores",
+    "payouts": "Pagos",
+    "fund_organization": "Financiar Organización",
+    "allocate_payout": "Asignar Pago",
+    "claim_payout": "Reclamar Pago",
+    "settings": "Configuración",
+    "overview": "Resumen",
+    "no_organization": "Ninguna organización seleccionada",
+    "select_organization": "Selecciona una organización para comenzar",
+    "organization_id": "ID de Organización",
+    "budget": "Presupuesto",
+    "claimable_balance": "Saldo Reclamable",
+    "address": "Dirección",
+    "amount": "Cantidad",
+    "status": "Estado",
+    "actions": "Acciones"
+  },
+  "wallet": {
+    "connect": "Conectar Billetera",
+    "connecting": "Conectando...",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "error": "Error al conectar billetera",
+    "install_freighter": "Instalar Freighter"
+  },
+  "language": {
+    "switcher": "Idioma",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語"
+  }
+}

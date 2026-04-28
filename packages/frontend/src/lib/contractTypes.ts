@@ -17,6 +17,8 @@ export interface Organization {
   name: string;
   /** Stellar address of the organization admin. */
   admin: string;
+  /** IPFS Content Identifier for extended metadata (Logo, Description). */
+  metadataCid?: string;
 }
 
 /** Mirrors the `Maintainer` contracttype from PayoutRegistry. */
@@ -36,6 +38,8 @@ export interface MaintainerBalance {
   stroops: bigint;
   /** Human-readable XLM amount string (e.g. "1.2500000"). */
   xlm: string;
+  /** True if this is an optimistic update and hasn't been confirmed yet. */
+  isPending?: boolean;
 }
 
 /** Payout allocation payload sent to the backend API. */

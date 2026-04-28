@@ -27,15 +27,16 @@
 /* ── Base ───────────────────────────────────────────────────────────────────── */
 @layer base {
   * {
-    @apply box-border;
+    box-sizing: border-box;
   }
 
   html {
-    @apply scroll-smooth;
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-stellar-blue text-white;
+    background-color: var(--color-stellar-blue);
+    color: white;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -46,7 +47,8 @@
 
   /* Focus ring — accessible and on-brand */
   :focus-visible {
-    @apply outline-none ring-2 ring-stellar-purple ring-offset-2 ring-offset-stellar-blue;
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-stellar-purple), 0 0 0 4px var(--color-stellar-blue);
   }
 
   /* Scrollbar styling for modern browsers */
@@ -55,13 +57,14 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-white/10;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-white/20;
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
@@ -69,11 +72,17 @@
 @layer components {
   /* Glassmorphism card — reused across the dashboard */
   .glass-card {
-    @apply rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(4px);
   }
 
   .glass-panel {
-    @apply rounded-2xl border border-white/[0.20] bg-white/[0.10] backdrop-blur-md;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(16px);
   }
 
   @supports not (backdrop-filter: blur(0)) {
@@ -85,11 +94,20 @@
 
   /* Gradient text utility */
   .gradient-text {
-    @apply bg-gradient-to-r from-stellar-purple to-stellar-teal bg-clip-text text-transparent;
+    background: linear-gradient(to right, var(--color-stellar-purple), var(--color-stellar-teal));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   /* Status badge base */
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
   }
 }

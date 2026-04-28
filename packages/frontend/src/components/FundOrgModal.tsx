@@ -15,8 +15,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFreighter } from "@/hooks/useFreighter";
-import { useFundOrg } from "@/hooks/useFundOrg";
+import { useUnifiedWallet } from "@/hooks/useUnifiedWallet";
 import {
   readAccountXlmBalance,
 } from "@/lib/sorobanClient";
@@ -34,8 +33,7 @@ interface FundOrgModalProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
-  const { isConnected, publicKey } = useFreighter();
-  const { fundOrg, isSubmitting, error } = useFundOrg();
+  const { isConnected, publicKey, signTransaction } = useUnifiedWallet();
 
   const [amount, setAmount] = useState("");
 

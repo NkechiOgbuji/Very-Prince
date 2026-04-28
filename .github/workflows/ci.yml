@@ -5,12 +5,13 @@
 # This workflow validates the entire very-princess monorepo on every push to
 # `main` and on every Pull Request targeting `main`.
 #
-# The pipeline is split into two parallel jobs that run concurrently:
+# The pipeline is split into three parallel jobs that run concurrently:
 #
 #   ┌─────────────────────────────────────────────────────┐
 #   │  JOB 1: node                                        │
 #   │   • Sets up Node.js 20                              │
 #   │   • Installs all npm workspace dependencies         │
+#   │   • Runs npm audit (fails on High/Critical CVEs)    │
 #   │   • Runs lint across the monorepo via Turborepo     │
 #   │   • Runs unit tests across the monorepo             │
 #   │   • Builds packages/backend (Fastify / TypeScript)  │
@@ -23,10 +24,18 @@
 #   │   • Adds the wasm32-unknown-unknown compilation     │
 #   │     target required by Soroban                      │
 #   │   • Installs the Stellar CLI for `contract build`   │
+#   │   • Installs cargo-audit and scans Cargo.lock       │
 #   │   • Runs `cargo fmt --check` (formatting lint)      │
 #   │   • Runs `cargo clippy` (Rust-idiomatic lint)       │
 #   │   • Runs `cargo test` (unit tests)                  │
 #   │   • Builds the optimised release WASM artefact      │
+#   └─────────────────────────────────────────────────────┘
+#
+#   ┌─────────────────────────────────────────────────────┐
+#   │  JOB 3: e2e                                         │
+#   │   • Spins up postgres:15 and redis:alpine services  │
+#   │   • Runs npx prisma migrate deploy                  │
+#   │   • Executes Fastify and Next.js E2E test suites    │
 #   └─────────────────────────────────────────────────────┘
 #
 # Turborepo remote caching is intentionally disabled in CI to keep the
@@ -77,7 +86,7 @@ jobs:
   # Turborepo to take advantage of task-graph dependency ordering and
   # build caching.
   node:
-    name: "Node.js — Lint, Build & Type-check"
+    name: "Node.js — Lint, Audit, Build & Type-check"
     runs-on: ubuntu-latest
 
     steps:
@@ -101,6 +110,12 @@ jobs:
       #    (`npm ci` instead of `npm install`) to guarantee reproducibility.
       - name: Install npm dependencies
         run: npm ci
+
+      # 3.5. Security audit — scans all npm workspace packages for known CVEs.
+      #      Fails the pipeline immediately if any High or Critical vulnerability
+      #      is found. Resolves Issue #64 (Automated Dependency Security Audits).
+      - name: npm audit (High/Critical CVEs)
+        run: npm audit --audit-level=high
 
       # 4. Lint — runs `eslint` across packages/backend and packages/frontend.
       #    Turborepo parallelises this across both packages automatically.
@@ -135,7 +150,7 @@ jobs:
   # Validates the PayoutRegistry smart contract written in Rust.
   # This job runs in parallel with `node` — neither depends on the other.
   contracts:
-    name: "Contracts — Fmt, Clippy, Test & Build"
+    name: "Contracts — Fmt, Clippy, Audit, Test & Build"
     runs-on: ubuntu-latest
 
     # All steps in this job default to the contracts package directory so
@@ -185,6 +200,14 @@ jobs:
             --version ${{ env.SOROBAN_CLI_VERSION }} \
             --features opt
 
+      # 4.5. Security audit — scans Cargo.lock for known CVEs in Rust crates.
+      #      Fails the pipeline immediately if any High or Critical advisory is
+      #      found. Resolves Issue #64 (Automated Dependency Security Audits).
+      - name: Install and run cargo-audit
+        run: |
+          cargo install --locked cargo-audit --version 0.21.0
+          cargo audit
+
       # 5. Formatting lint — ensures all Rust source code has been passed
       #    through `cargo fmt`. PRs with unformatted code are rejected here.
       - name: Check Rust formatting (cargo fmt)
@@ -212,3 +235,82 @@ jobs:
       #    overflows, linker errors with wasm-opt).
       - name: Build release WASM (stellar contract build)
         run: stellar contract build --profile release
+
+  # ── Job 3: Containerized E2E Testing ─────────────────────────────────────
+  # Spins up real postgres and redis service containers, runs Prisma
+  # migrations against the ephemeral DB, then executes the E2E test suites.
+  # Resolves Issue #67 (Containerized E2E Testing Environment).
+  e2e:
+    name: "E2E — Containerized Integration Tests"
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: very_princess_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/very_princess_test"
+      REDIS_URL: "redis://localhost:6379"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # Run Prisma migrations against the ephemeral CI database before tests.
+      - name: Run Prisma migrations
+        run: npx prisma migrate deploy
+        working-directory: packages/backend
+
+      # Execute the Fastify backend E2E / integration test suite.
+      - name: Run backend E2E tests
+        run: npx turbo run test --filter=backend
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          REDIS_URL: ${{ env.REDIS_URL }}
+
+      # Execute the Next.js frontend E2E tests via Playwright.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: packages/frontend
+
+      - name: Run frontend E2E tests (Playwright)
+        run: npx playwright test
+        working-directory: packages/frontend
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          REDIS_URL: ${{ env.REDIS_URL }}
+          NEXT_PUBLIC_CONTRACT_ID: "PLACEHOLDER_FOR_CI_BUILD"
+          NEXT_PUBLIC_RPC_URL: "https://soroban-testnet.stellar.org"
+          NEXT_PUBLIC_HORIZON_URL: "https://horizon-testnet.stellar.org"
+          NEXT_PUBLIC_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"

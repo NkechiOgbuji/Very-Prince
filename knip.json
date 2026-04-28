@@ -1,0 +1,53 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schemas/knip.json",
+  "entry": [
+    "packages/*/src/index.{ts,js}",
+    "packages/*/src/app/**/*.{ts,tsx,js,jsx}",
+    "packages/*/src/pages/**/*.{ts,tsx,js,jsx}"
+  ],
+  "project": [
+    "packages/*/src/**/*.{ts,tsx,js,jsx}"
+  ],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/coverage/**",
+    "**/*.d.ts",
+    "**/*.config.{js,ts}",
+    "**/.storybook/**"
+  ],
+  "ignoreDependencies": [
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "eslint",
+    "prettier",
+    "typescript",
+    "turbo"
+  ],
+  "rules": {
+    "dependencies": true,
+    "devDependencies": true,
+    "unlisted": true,
+    "duplicates": true,
+    "binaries": true,
+    "nsExports": true,
+    "nsTypes": true,
+    "enumMembers": true,
+    "exports": true,
+    "types": true,
+    "classMembers": true,
+    "imports": true,
+    "files": true,
+    "dirs": true,
+    "scripts": true
+  },
+  "workspaces": {
+    "packages/*/package.json": {
+      "entry": ["src/**/*.{ts,tsx,js,jsx}"],
+      "project": ["src/**/*.{ts,tsx,js,jsx}"]
+    }
+  }
+}

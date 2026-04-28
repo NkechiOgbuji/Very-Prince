@@ -1,0 +1,96 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "close": "Close",
+    "dashboard": "Dashboard",
+    "organizations": "Organizations",
+    "payouts": "Payouts",
+    "profile": "Profile"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "github": "View on GitHub",
+    "stellar_network": "Stellar Network",
+    "drips": "Drips"
+  },
+  "home": {
+    "title": "very-princess — Stellar Payout Registry",
+    "description": "A decentralised payout registry for open-source maintainers, built on Stellar Soroban. Connect your Freighter wallet to view and claim your payouts.",
+    "hero_title": "Open Source",
+    "hero_subtitle": "Payout Registry",
+    "hero_description": "A transparent, on-chain system for multi-organization maintenance payouts. Organizations register, allocate, and maintainers self-custody their contributions — all on Stellar.",
+    "open_dashboard": "Open Dashboard →",
+    "badge_text": "Built on Stellar Soroban · Drips Wave 4",
+    "footer_text": "very-princess is open source — MIT Licensed"
+  },
+  "features": {
+    "on_chain": {
+      "title": "On-chain Registry",
+      "description": "Organizations and maintainers are registered directly on Stellar Soroban — transparent and tamper-proof."
+    },
+    "instant_payouts": {
+      "title": "Instant Payouts",
+      "description": "Org admins allocate payouts on-chain. Maintainers claim their accumulated balance in a single transaction."
+    },
+    "self_custodial": {
+      "title": "Self-custodial",
+      "description": "No intermediary holds your funds. Claim directly to your Freighter wallet — your keys, your XLM."
+    },
+    "open_source": {
+      "title": "Open Source",
+      "description": "Built for the Drips community funding model. Fork it, extend it, contribute. See CONTRIBUTING.md."
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "connect_wallet": "Connect Wallet",
+    "wallet_connected": "Wallet Connected",
+    "organizations": "Organizations",
+    "maintainers": "Maintainers",
+    "payouts": "Payouts",
+    "fund_organization": "Fund Organization",
+    "allocate_payout": "Allocate Payout",
+    "claim_payout": "Claim Payout",
+    "settings": "Settings",
+    "overview": "Overview",
+    "no_organization": "No organization selected",
+    "select_organization": "Select an organization to get started",
+    "organization_id": "Organization ID",
+    "budget": "Budget",
+    "claimable_balance": "Claimable Balance",
+    "address": "Address",
+    "amount": "Amount",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "settings": {
+    "email_preferences": "Email Preferences",
+    "email_description": "Get notified instantly when an organization allocates funds to your wallet.",
+    "email_label": "Email Address",
+    "email_placeholder": "maintainer@example.com",
+    "save_email": "Save & Opt-in",
+    "saving": "Verifying & Saving...",
+    "remove_email": "Remove Email",
+    "verify_ownership": "Verification Required",
+    "verify_description": "To prevent spam, you must sign a message with your wallet to prove ownership before saving your email.",
+    "opted_in": "You are currently opted in to email notifications."
+  },
+  "wallet": {
+    "connect": "Connect Wallet",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "error": "Failed to connect wallet",
+    "install_freighter": "Install Freighter"
+  },
+  "language": {
+    "switcher": "Language",
+    "english": "English",
+    "spanish": "Español",
+    "japanese": "日本語"
+  }
+}
