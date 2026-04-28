@@ -17,8 +17,6 @@
 import { useEffect, useState } from "react";
 import { useUnifiedWallet } from "@/hooks/useUnifiedWallet";
 import {
-  buildFundOrgTransaction,
-  submitSignedTransaction,
   readAccountXlmBalance,
 } from "@/lib/sorobanClient";
 import { FaucetBanner, type BalanceStatus } from "@/components/FaucetBanner";
@@ -38,27 +36,27 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
   const { isConnected, publicKey, signTransaction } = useUnifiedWallet();
 
   const [amount, setAmount] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Balance detection for the smart FaucetBanner
+  // Balance detection for the smart FaucetBanner and display
   const [balanceStatus, setBalanceStatus] = useState<BalanceStatus>("loading");
+  const [balance, setBalance] = useState<number | null>(null);
 
   // ── Detect wallet balance on mount ────────────────────────────────────────
   useEffect(() => {
     if (!publicKey) {
-      // No wallet connected — skip the check; the submit button already guards this.
       setBalanceStatus("sufficient");
+      setBalance(null);
       return;
     }
 
     let cancelled = false;
 
-    readAccountXlmBalance(publicKey).then((balance) => {
+    readAccountXlmBalance(publicKey).then((balanceValue) => {
       if (cancelled) return;
-      if (balance === null) {
+      setBalance(balanceValue);
+      if (balanceValue === null) {
         setBalanceStatus("unfunded");  // Horizon 404 — account never activated
-      } else if (balance === 0) {
+      } else if (balanceValue === 0) {
         setBalanceStatus("empty");     // Account exists but has no XLM
       } else {
         setBalanceStatus("sufficient");
@@ -73,37 +71,12 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isConnected || !publicKey) {
-      setError("Please connect Freighter first.");
-      return;
-    }
-
     const numAmount = Number(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setError("Please enter a valid positive amount.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-
     try {
-      const stroops = BigInt(Math.floor(numAmount * 10_000_000));
-
-      // Step 1 — build & simulate the unsigned transaction XDR
-      const unsignedXdr = await buildFundOrgTransaction(orgId, publicKey, stroops);
-
-      // Step 2 — ask Freighter to sign it (user approves in the extension popup)
-      const signedXdr = await signTransaction(unsignedXdr);
-
-      // Step 3 — broadcast to Soroban RPC and wait for ledger confirmation
-      await submitSignedTransaction(signedXdr);
-
+      await fundOrg(orgId, numAmount);
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Funding failed. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      // Error is handled by the hook
     }
   };
 
@@ -191,38 +164,19 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
               </div>
             </div>
 
-            {/* ── Error message ── */}
-            {error && (
-              <div
-                id="fund-error"
-                role="alert"
-                className="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"
-              >
-                {error}
+            {/* ── Balance and Fee Info ── */}
+            <div className="mb-5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/70">Your Balance:</span>
+                <span className="font-mono text-white">
+                  {balance !== null ? `${balance.toFixed(4)} XLM` : "Loading..."}
+                </span>
               </div>
-            )}
-
-            {/* ── Submit button ── */}
-            <button
-              type="submit"
-              id="fund-confirm-btn"
-              disabled={
-                !amount ||
-                isSubmitting ||
-                !isConnected ||
-                balanceStatus === "unfunded" ||
-                balanceStatus === "empty"
-              }
-              className="w-full rounded-xl bg-gradient-to-r from-stellar-purple to-stellar-teal px-4 py-3.5 text-center font-bold text-white shadow-lg shadow-stellar-purple/20 transition-all duration-300 hover:scale-[1.02] hover:shadow-stellar-purple/40 disabled:pointer-events-none disabled:opacity-40"
-            >
-              {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="h-5 w-5 animate-spin text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
+              <div className="mt-2 flex justify-between text-sm">
+                <span className="text-white/70">Network Fee:</span>
+                <span className="font-mono text-white">~0.00001 XLM</span>
+              </div>
+            </div>
                       className="opacity-25"
                       cx="12"
                       cy="12"
@@ -249,7 +203,7 @@ export function FundOrgModal({ orgId, onClose, onSuccess }: FundOrgModalProps) {
 
             {/* ── Fee note ── */}
             <p className="mt-3 text-center text-[10px] text-white/25">
-              A small Stellar network fee (&lt; 0.01 XLM) will be deducted from your wallet.
+              The network fee will be deducted from your wallet in addition to the funding amount.
             </p>
           </form>
         </div>
