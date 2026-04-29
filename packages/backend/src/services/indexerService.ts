@@ -12,6 +12,7 @@ import { RPC_URL, CONTRACT_ID, DEPLOYMENT_LEDGER } from '../config/env.js';
 import { stellarService } from './stellarService.js';
 import { prisma } from './db.js';
 import { emitSSEEvent } from '../routes/events.js';
+import { webhookService } from './WebhookService.js';
 import {
   decodeSorobanEvent,
   parseContractEvent,
@@ -21,6 +22,7 @@ import {
   type PayoutAllocatedEvent,
   type OrgFundedEvent,
   type PayoutClaimedEvent,
+  type MaintainerAddedEvent,
 } from '../utils/xdrDecoder.js';
 
 /**
@@ -236,6 +238,8 @@ export class IndexerService {
         const claimEvent = event as PayoutClaimedEvent;
         walletAddress = claimEvent.maintainer;
         volumeUSD = BigInt(claimEvent.amount);
+        
+        // SSE
         emitSSEEvent('payout_claimed', {
           maintainer: claimEvent.maintainer,
           amountStroops: claimEvent.amount,
@@ -243,6 +247,22 @@ export class IndexerService {
           ledger: claimEvent.ledger,
           txHash: claimEvent.txHash,
         });
+
+        // Trigger Webhook
+        // We need the orgId, so we look it up from our local Maintainer table
+        const maintainer = await prisma.maintainer.findUnique({
+          where: { address: claimEvent.maintainer }
+        });
+
+        if (maintainer) {
+          await webhookService.dispatchPayoutClaimed(
+            maintainer.orgId,
+            claimEvent.maintainer,
+            claimEvent.amount,
+            claimEvent.txHash,
+            claimEvent.ledger
+          );
+        }
         break;
       }
 
@@ -272,12 +292,25 @@ export class IndexerService {
       }
 
       case 'MaintainerAdded': {
-        walletAddress = event.maintainer;
+        const maintainerEvent = event as MaintainerAddedEvent;
+        walletAddress = maintainerEvent.maintainer;
+        
+        // SSE
         emitSSEEvent('maintainer_added', {
-          orgId: event.orgId,
-          maintainer: event.maintainer,
-          ledger: event.ledger,
-          txHash: event.txHash,
+          orgId: maintainerEvent.orgId,
+          maintainer: maintainerEvent.maintainer,
+          ledger: maintainerEvent.ledger,
+          txHash: maintainerEvent.txHash,
+        });
+
+        // Store maintainer relation
+        await prisma.maintainer.upsert({
+          where: { address: maintainerEvent.maintainer },
+          update: { orgId: maintainerEvent.orgId },
+          create: {
+            address: maintainerEvent.maintainer,
+            orgId: maintainerEvent.orgId,
+          }
         });
         break;
       }

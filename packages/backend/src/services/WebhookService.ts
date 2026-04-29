@@ -1,13 +1,37 @@
 import { webhookRepository } from "../repositories/WebhookRepository.js";
-import fetch from "node-fetch";
 import { createHash, randomBytes } from "node:crypto";
+import { Queue } from "bullmq";
+import { redis } from "./cache.js";
+
+export interface WebhookJobData {
+  organizationId: string;
+  event: string;
+  data: any;
+}
 
 export class WebhookService {
+  private webhookQueue: Queue;
+
+  constructor() {
+    this.webhookQueue = new Queue("webhook-dispatch", {
+      connection: redis,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: {
+          type: "exponential",
+          delay: 5000,
+        },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    });
+  }
+
   private generateWebhookSecret(): string {
     return randomBytes(32).toString('hex');
   }
 
-  private calculateSignature(payload: string, secret: string): string {
+  calculateSignature(payload: string, secret: string): string {
     return createHash('sha256').update(payload).update(secret).digest('hex');
   }
 
@@ -32,108 +56,40 @@ export class WebhookService {
     return webhookRepository.upsertConfig(organizationId, url, secret);
   }
 
-  async sendTestWebhook(organizationId: string) {
-    const config = await webhookRepository.getConfig(organizationId);
-    if (!config) throw new Error("Webhook not configured");
-
-    const payload = {
-      event: "test",
-      timestamp: new Date().toISOString(),
-      organizationId,
-      message: "This is a test webhook from Very Princess",
-    };
-
-    const payloadString = JSON.stringify(payload);
-    const signature = this.calculateSignature(payloadString, config.secret);
-
-    try {
-      const response = await fetch(config.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Very-Princess-Webhook/1.0",
-          "X-Very-Princess-Signature": signature,
-          "X-Very-Princess-Timestamp": new Date().toISOString(),
-        },
-        body: payloadString,
-        timeout: 5000,
-      });
-
-      const responseBody = await response.text();
-      
-      await webhookRepository.createDelivery(
-        config.id,
-        payload,
-        response.status,
-        responseBody,
-        signature
-      );
-
-      return {
-        success: response.ok,
-        statusCode: response.status,
-        responseBody,
-        signature,
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      await webhookRepository.createDelivery(
-        config.id,
-        payload,
-        undefined,
-        undefined,
-        undefined,
-        errorMessage
-      );
-      throw error;
-    }
-  }
-
-  async sendWebhook(organizationId: string, event: string, data: any) {
+  /**
+   * Dispatches a webhook asynchronously using BullMQ.
+   */
+  async queueWebhook(organizationId: string, event: string, data: any) {
     const config = await webhookRepository.getConfig(organizationId);
     if (!config || !config.url) {
-      console.log(`Webhook not configured for organization ${organizationId}`);
-      return false;
+      return;
     }
 
-    const payload = {
-      event,
-      timestamp: new Date().toISOString(),
+    await this.webhookQueue.add(`webhook:${event}:${organizationId}`, {
       organizationId,
+      event,
       data,
-    };
+    });
+  }
 
-    const payloadString = JSON.stringify(payload);
-    const signature = this.calculateSignature(payloadString, config.secret);
-
-    try {
-      const response = await fetch(config.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Very-Princess-Webhook/1.0",
-          "X-Very-Princess-Signature": signature,
-          "X-Very-Princess-Timestamp": new Date().toISOString(),
-        },
-        body: payloadString,
-        timeout: 10000,
-      });
-
-      const responseBody = await response.text();
-      
-      await webhookRepository.createDelivery(
-        config.id,
-        payload,
-        response.status,
-        responseBody,
-        signature
-      );
-
-      return response.ok;
-    } catch (error) {
-      console.error(`Failed to send webhook to ${config.url}:`, error);
-      return false;
-    }
+  /**
+   * Specifically handles PayoutClaimed webhooks.
+   */
+  async dispatchPayoutClaimed(
+    organizationId: string, 
+    maintainer: string, 
+    amountStroops: string, 
+    txHash: string,
+    ledger: number
+  ) {
+    await this.queueWebhook(organizationId, "payout_claimed", {
+      maintainer,
+      amountStroops,
+      amountXlm: (Number(amountStroops) / 10_000_000).toFixed(7),
+      txHash,
+      ledger,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 

@@ -40,6 +40,7 @@ import { apiKeyRoutes } from "./routes/apiKeys.js";
 import { indexerService } from "./services/indexerService.js";
 import { notificationController } from "./controllers/notificationController.js";
 import { configureTRPC } from "./trpc/server.js";
+import { webhookWorker } from "./workers/WebhookWorker.js";
 
 // Sentry initialization
 import * as Sentry from "@sentry/node";
@@ -195,9 +196,10 @@ try {
   indexerService.start();
   
   // Graceful shutdown
-  const gracefulShutdown = (signal: string) => {
+  const gracefulShutdown = async (signal: string) => {
     server.log.info(`Received ${signal}, shutting down gracefully...`);
     indexerService.stop();
+    await webhookWorker.stop();
     server.close(() => {
       server.log.info('Server closed');
       process.exit(0);

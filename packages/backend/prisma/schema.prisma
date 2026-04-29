@@ -55,6 +55,14 @@ model PayoutEvent {
   @@index([createdAt])
 }
 
+model Maintainer {
+  address   String   @id
+  orgId     String
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+}
+
 model IndexerState {
   id                  String   @id @default("default")
   lastProcessedLedger Int
