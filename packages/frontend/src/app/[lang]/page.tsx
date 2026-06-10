@@ -63,7 +63,7 @@ export default async function HomePage({ params }: HomePageProps) {
 
           <div className="flex items-center gap-4">
             <Link
-              href={`/${params.lang}/dashboard`}
+              href="/dashboard"
               className="text-sm font-medium text-white/60 transition-colors hover:text-white"
             >
               {dictionary.navigation.dashboard}
@@ -106,7 +106,7 @@ export default async function HomePage({ params }: HomePageProps) {
           {/* CTAs */}
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link
-              href={`/${params.lang}/dashboard`}
+              href="/dashboard"
               id="go-to-dashboard-btn"
               className="rounded-lg bg-gradient-to-r from-stellar-purple to-brand-500 px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-stellar-purple/30 transition-all duration-200 hover:brightness-110 hover:shadow-stellar-purple/50"
             >
