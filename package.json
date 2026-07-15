@@ -24,6 +24,8 @@
     "staging:deploy": "npm run staging:build && npm run staging:deploy:infra",
     "staging:deploy:infra": "docker-compose -f docker-compose.staging.yml up -d",
     "staging:stop": "docker-compose -f docker-compose.staging.yml down",
+    "deploy:local": "bash packages/contracts/scripts/deploy-local.sh",
+    "deploy:local:teardown": "bash packages/contracts/scripts/deploy-local.sh --teardown",
     "release": "changeset publish"
   },
   "devDependencies": {
