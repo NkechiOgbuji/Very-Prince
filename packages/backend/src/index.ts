@@ -74,6 +74,7 @@ await server.register(swagger, {
       { name: 'Stats', description: 'Statistics and analytics' },
       { name: 'Events', description: 'Event tracking' },
       { name: 'Webhooks', description: 'Webhook management' },
+      { name: 'Health', description: 'Service health and uptime' },
     ],
   },
 });

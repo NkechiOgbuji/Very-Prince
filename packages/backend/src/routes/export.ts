@@ -1,7 +1,21 @@
-import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-import csv from 'fast-csv';
+/**
+ * @file export.ts
+ * @description Export route for accounting data (CSV/JSON).
+ * 
+ * This route allows organizations and maintainers to export their payout history
+ * for tax purposes, accounting software (like QuickBooks), or internal audits.
+ * 
+ * Endpoint: GET /api/export/payouts/:address
+ * Query parameters:
+ * - type: csv or json (required)
+ * - startDate: ISO date string (optional)
+ * - endDate: ISO date string (optional)
+ */
+
+import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
+import csv from "fast-csv";
+import { prisma } from "../services/db.js";
 
 const prisma = new PrismaClient();
 
