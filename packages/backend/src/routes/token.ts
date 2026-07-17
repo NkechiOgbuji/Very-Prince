@@ -1,10 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../services/db.js";
-
-export interface VerifyResponse {
-  isVerified: boolean;
-  riskLevel: "LOW" | "HIGH";
-}
+import type { VerifyTokenResponse } from "@very-prince/types";
 
 export const tokenController = {
   /**
@@ -13,7 +9,7 @@ export const tokenController = {
    * @param address - Token contract address to look up.
    * @returns Verification status and risk level (`LOW` or `HIGH`).
    */
-  async verifyToken(address: string): Promise<VerifyResponse> {
+  async verifyToken(address: string): Promise<VerifyTokenResponse> {
     const verifiedContract = await prisma.verifiedContract.findUnique({
       where: { address },
     });

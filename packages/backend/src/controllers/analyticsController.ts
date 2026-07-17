@@ -5,13 +5,7 @@
 
 import { prisma } from "../services/db.js";
 import { safeGet, safeSet } from "../services/cache.js";
-
-export interface LeaderboardEntry {
-  rank: number;
-  walletAddress: string;
-  truncatedAddress: string;
-  volumeUSD: number;
-}
+import type { LeaderboardEntry } from "@very-prince/types";
 
 export const analyticsController = {
   /**

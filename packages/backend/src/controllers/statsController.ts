@@ -9,30 +9,12 @@
 import { stellarService } from "../services/stellarService.js";
 import { safeGet, safeSet } from "../services/cache.js";
 import { prisma } from "../services/db.js";
-
-export interface GlobalStatsResponse {
-  /** Number of registered organizations on-chain. */
-  totalOrganizations: number;
-  /** Sum of all org budgets currently held in the contract (stroops). */
-  totalFundedStroops: string;
-  /** Same value expressed in whole XLM. */
-  totalFundedXlm: string;
-  /** Sum of all maintainer claimable balances (stroops). */
-  totalClaimedStroops: string;
-  /** Same value expressed in whole XLM. */
-  totalClaimedXlm: string;
-  /** ISO timestamp of when this result was computed. */
-  cachedAt: string;
-  /** ISO timestamp of when the cache will expire. */
-  cacheExpiresAt: string;
-}
-
-export interface TopMaintainer {
-  address: string;
-  totalEarningsXlm: string;
-  totalEarningsStroops: string;
-  organizationsAssisted: number;
-}
+import type {
+  GlobalStatsResponse,
+  TVLResponse,
+  FundsRaisedResponse,
+  TopMaintainer,
+} from "@very-prince/types";
 
 function stroopsToXlm(stroops: bigint): string {
   return (Number(stroops) / 10_000_000).toFixed(7);
@@ -296,27 +278,3 @@ export const statsController = {
     return sorted;
   },
 } as const;
-
-export interface TVLResponse {
-  /** Total Value Locked in USD. */
-  tvlUSD: string;
-  /** ISO timestamp of when this value was computed. */
-  lastUpdated: string;
-}
-
-export interface FundsRaisedResponse {
-  /** Total funds raised across all organisations, in stroops. */
-  totalFundsRaisedStroops: string;
-  /** Total funds raised expressed in whole XLM. */
-  totalFundsRaisedXlm: string;
-  /** Total number of individual funding transactions. */
-  totalFundingEvents: number;
-  /** Number of distinct organisations that received funds. */
-  distinctOrgsCount: number;
-  /** ISO timestamp of the earliest funding event included (if filtered). */
-  fromDate?: string;
-  /** ISO timestamp of the latest funding event included (if filtered). */
-  toDate?: string;
-  /** ISO timestamp of when this result was computed. */
-  cachedAt: string;
-}

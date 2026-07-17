@@ -7,31 +7,20 @@
  */
 
 import { trpcClient } from '../trpc/client';
+import type {
+  OrganizationDetailsResponse,
+  PaginatedResponse,
+  OrgListItem,
+  FundResponse,
+} from '@very-prince/types';
 
-// Re-export the types from the original API for compatibility
-export interface Org {
-  id: string;
-  name: string;
-  admin: string;
-  budgetStroops?: string; // Budget in stroops from tRPC
-  budgetXlm?: string; // Budget in XLM from tRPC
-  publicBudget?: string; // Legacy field for compatibility
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    totalPages: number;
-    currentPage: number;
-    totalCount: number;
-  };
-}
+export type { OrganizationDetailsResponse as Org, PaginatedResponse, OrgListItem };
 
 /**
  * Fetch organization details using tRPC with full type safety.
  * This replaces the REST endpoint GET /api/org/:id
  */
-export async function fetchOrganizationWithTRPC(id: string): Promise<Org> {
+export async function fetchOrganizationWithTRPC(id: string): Promise<OrganizationDetailsResponse> {
   try {
     return await trpcClient.organization.get.query({ id });
   } catch (error) {
@@ -59,7 +48,7 @@ export async function getContractStatusWithTRPC() {
  * Note: This still uses REST API for now since we haven't implemented
  * the list endpoint in tRPC yet.
  */
-export async function fetchOrganizations(page: number = 1, limit: number = 10, search?: string): Promise<PaginatedResponse<Org>> {
+export async function fetchOrganizations(page: number = 1, limit: number = 10, search?: string): Promise<PaginatedResponse<OrgListItem>> {
   const BACKEND_URL = process.env["NEXT_PUBLIC_BACKEND_URL"] ?? "http://localhost:3001/api/v1/contract";
   const params = new URLSearchParams({
     page: page.toString(),
@@ -87,7 +76,7 @@ export async function registerOrganization(
   name: string,
   admin: string,
   signerSecret: string
-): Promise<{ success: boolean; transactionHash?: string }> {
+): Promise<FundResponse> {
   const BACKEND_URL = process.env["NEXT_PUBLIC_BACKEND_URL"] ?? "http://localhost:3001/api/v1/contract";
   const response = await fetch(`${BACKEND_URL}/orgs`, {
     method: "POST",

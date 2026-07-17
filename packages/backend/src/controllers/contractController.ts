@@ -4,64 +4,16 @@ import {
 } from "../services/organizationService.js";
 import { payoutService } from "../services/payoutService.js";
 import { stellarService } from "../services/stellarService.js";
-
-// ─── Response Types ───────────────────────────────────────────────────────────
-
-export interface OrgResponse {
-  id: string;
-  name: string;
-  admin: string;
-}
-
-export interface MaintainersResponse {
-  orgId: string;
-  maintainers: string[];
-  count: number;
-  meta: {
-    // Define meta for pagination functions
-    page: number;
-    limit: number;
-    totalCount: number;
-    totalPages: number;
-  };
-}
-
-export interface BalanceResponse {
-  maintainer: string;
-  claimableStroops: string;
-  claimableXlm: string;
-}
-
-export interface BudgetResponse {
-  orgId: string;
-  budgetStroops: string;
-  budgetXlm: string;
-}
-
-export interface FundResponse {
-  success: boolean;
-  transactionHash: string | undefined;
-  orgId: string;
-  donor: string;
-  amountStroops: string;
-}
-
-export interface PayoutResponse {
-  success: boolean;
-  transactionHash: string | undefined;
-  orgId: string;
-  maintainer: string;
-  amountStroops: string;
-}
-
-export interface ClaimTransactionResponse {
-  transactionXdr: string;
-}
-
-export interface SubmitTransactionResponse {
-  success: boolean;
-  transactionHash: string | undefined;
-}
+import type {
+  OrgResponse,
+  MaintainersResponse,
+  BalanceResponse,
+  BudgetResponse,
+  FundResponse,
+  PayoutResponse,
+  ClaimTransactionResponse,
+  SubmitTransactionResponse,
+} from "@very-prince/types";
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 

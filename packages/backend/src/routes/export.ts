@@ -16,8 +16,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import csv from "fast-csv";
 import { prisma } from "../services/db.ts";
-
-
+import type { ExportRecord } from "@very-prince/types";
 
 const ExportQuerySchema = z.object({
   type: z.enum(['csv', 'json']),
@@ -28,19 +27,6 @@ const ExportQuerySchema = z.object({
 const AddressParamsSchema = z.object({
   address: z.string().startsWith('G').length(56),
 });
-
-interface ExportRecord {
-  date: string;
-  orgId: string;
-  orgName: string | undefined;
-  maintainerAddress: string;
-  amountXlm: string;
-  amountStroops: string;
-  usdValue: string;
-  transactionHash: string;
-  ledger: number;
-  eventType: string;
-}
 
 export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   /**

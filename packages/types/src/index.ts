@@ -6,6 +6,10 @@
  * to ensure a single source of truth for all Soroban-derived data shapes.
  */
 
+// ── API response types ────────────────────────────────────────────────────────
+
+export * from "./api-responses.js";
+
 // ── Stellar / Soroban primitives ──────────────────────────────────────────────
 
 /** A Stellar public key (G…). */
