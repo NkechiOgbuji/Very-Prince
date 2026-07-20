@@ -5,6 +5,8 @@
 
 "use client";
 
+import { useRouter } from "next/navigation";
+import { readOrganization, readOrgBudget, readMaintainers } from "@/lib/sorobanClient";
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +40,16 @@ export default function OrganizationsPage() {
     }
     return response.json();
   };
+
+  const router = useRouter();
+
+const handlePrefetchOrg = (orgId: string) => {
+  router.prefetch(`/dashboard?org=${orgId}`);
+  // Warm the Soroban read calls so they're cached/in-flight before the click
+  void readOrganization(orgId).catch(() => {});
+  void readOrgBudget(orgId).catch(() => {});
+  void readMaintainers(orgId).catch(() => {});
+};
 
   // Build API URL with search and pagination
   const apiUrl = useMemo(() => {
@@ -135,6 +147,8 @@ export default function OrganizationsPage() {
             <Link
               key={org.id}
               href={`/dashboard?org=${org.id}`}
+              onMouseEnter={() => handlePrefetchOrg(org.id)}
+              onFocus={() => handlePrefetchOrg(org.id)}
               className="glass-card group flex flex-col p-6 transition-all hover:border-stellar-purple/50 hover:bg-white/[0.08]"
             >
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-stellar-purple/20 text-xl group-hover:bg-stellar-purple/30">

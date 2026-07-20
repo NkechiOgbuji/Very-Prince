@@ -35,10 +35,29 @@ pub struct PayoutParams {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MaintainerPayout {
+pub struct VestingTranche {
+    pub unlock_timestamp: u64,
     pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MaintainerPayout {
+    /// Remaining amount locked across all unreleased tranches.
+    pub amount: i128,
+    /// Release progress is derived from the schedule stored below.
+    pub claimed_amount: i128,
+    pub tranches: Vec<VestingTranche>,
+}
+
+/// Single-tranche legacy shape used for backward compatibility.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyUnlock {
     pub unlock_timestamp: u64,
 }
+
+
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -443,15 +462,7 @@ impl PayoutRegistry {
             PERSISTENT_BUMP_AMOUNT,
         );
 
-        let empty_list: Vec<Address> = Vec::new(&env);
-        env.storage()
-            .persistent()
-            .set(&DataKey::OrgMaintainers(id.clone()), &empty_list);
-        env.storage().persistent().extend_ttl(
-            &DataKey::OrgMaintainers(id.clone()),
-            PERSISTENT_LIFETIME_THRESHOLD,
-            PERSISTENT_BUMP_AMOUNT,
-        );
+        // OrgMaintainers entry will be created lazily when a maintainer is added.
 
         env.storage()
             .persistent()
@@ -769,7 +780,8 @@ impl PayoutRegistry {
             &DataKey::MaintainerBalance(maintainer.clone()),
             &MaintainerPayout {
                 amount: 0,
-                unlock_timestamp: 0,
+                claimed_amount: 0,
+                tranches: Vec::new(&env),
             },
         );
         env.storage().persistent().extend_ttl(
@@ -868,13 +880,41 @@ impl PayoutRegistry {
     /// * `MaintainerOrgMismatch` - If the maintainer belongs to a different organization.
     /// * `InsufficientBudget` - If the organization does not have enough remaining budget.
     /// * `PayoutOverflow` - If the payout addition would overflow the maintainer's balance.
-    pub fn allocate_payout(
+pub fn allocate_payout(
         env: Env,
         org_id: Symbol,
         admin: Address,
         maintainer: Address,
         amount: i128,
         unlock_timestamp: u64,
+    ) {
+        // Backward compatible wrapper: map legacy unlock_timestamp into a
+        // single-tranche vesting schedule.
+        let mut tranches: Vec<VestingTranche> = Vec::new(&env);
+        tranches.push_back(VestingTranche {
+            unlock_timestamp,
+            amount,
+        });
+
+        Self::allocate_payout_vesting(env, org_id, admin, maintainer, amount, tranches);
+    }
+
+    /// Allocates a payout from the organization's budget to a maintainer using a custom
+    /// vesting schedule (multiple tranches).
+    ///
+    /// `amount` is the total locked amount across all tranches.
+    /// `tranches` defines how the amount unlocks over time. Each tranche unlocks at
+    /// `unlock_timestamp` and contributes its `amount` to the total.
+    ///
+    /// Backward compatibility: the legacy `allocate_payout` maps to this function with
+    /// a single tranche.
+    pub fn allocate_payout_vesting(
+        env: Env,
+        org_id: Symbol,
+        admin: Address,
+        maintainer: Address,
+        amount: i128,
+        tranches: Vec<VestingTranche>,
     ) {
         let _guard = ReentrancyGuard::acquire(&env);
         Self::assert_active(&env);
@@ -885,13 +925,15 @@ impl PayoutRegistry {
             panic_with_error!(&env, PrinceError::NotAuthorized);
         }
 
+        // Strict auth: bind signature to parameters including tranche schedule.
+        // Note: Soroban requires explicit auth-for-args bindings.
         admin.require_auth_for_args(
             (
                 org_id.clone(),
                 admin.clone(),
                 maintainer.clone(),
                 amount,
-                unlock_timestamp,
+                tranches.clone(),
             )
                 .into_val(&env),
         );
@@ -904,6 +946,42 @@ impl PayoutRegistry {
             panic_with_error!(&env, PrinceError::AmountExceedsLimit);
         }
 
+        if tranches.is_empty() {
+            panic_with_error!(&env, PrinceError::EmptyBatch);
+        }
+
+        // Validate tranches:
+        // - each tranche amount > 0
+        // - total tranche sum == amount
+        // - timestamps are non-decreasing
+        let mut last_ts: u64 = 0;
+        let mut total: i128 = 0_i128;
+        for i in 0..tranches.len() {
+            let t = tranches.get(i).unwrap();
+            if t.amount <= 0 {
+                panic_with_error!(&env, PrinceError::InvalidAmount);
+            }
+            if t.amount > MAX_AMOUNT_LIMIT {
+                panic_with_error!(&env, PrinceError::AmountExceedsLimit);
+            }
+
+            if i > 0 {
+                if t.unlock_timestamp < last_ts {
+                    // Non-monotonic vesting schedule
+                    panic_with_error!(&env, PrinceError::InvalidAmount);
+                }
+            }
+
+            total = total
+                .checked_add(t.amount)
+                .unwrap_or_else(|| panic_with_error!(&env, PrinceError::PayoutOverflow));
+            last_ts = t.unlock_timestamp;
+        }
+
+        if total != amount {
+            panic_with_error!(&env, PrinceError::InvalidAmount);
+        }
+
         let maintainer_org: Symbol = env
             .storage()
             .persistent()
@@ -913,6 +991,7 @@ impl PayoutRegistry {
             panic_with_error!(&env, PrinceError::MaintainerOrgMismatch);
         }
 
+        // Budget check + deduct total amount once.
         let budget_key = DataKey::OrgBudget(org_id.clone());
         let current_budget: i128 = env.storage().persistent().get(&budget_key).unwrap_or(0);
         if current_budget < amount {
@@ -928,6 +1007,7 @@ impl PayoutRegistry {
             PERSISTENT_BUMP_AMOUNT,
         );
 
+        // Load existing payout; if it exists, append tranches.
         let balance_key = DataKey::MaintainerBalance(maintainer.clone());
         let mut current_payout: MaintainerPayout = env
             .storage()
@@ -935,13 +1015,22 @@ impl PayoutRegistry {
             .get(&balance_key)
             .unwrap_or(MaintainerPayout {
                 amount: 0,
-                unlock_timestamp: 0,
+                claimed_amount: 0,
+                tranches: Vec::new(&env),
             });
+
         current_payout.amount = current_payout
             .amount
             .checked_add(amount)
             .unwrap_or_else(|| panic_with_error!(&env, PrinceError::PayoutOverflow));
-        current_payout.unlock_timestamp = unlock_timestamp;
+
+        // Append new tranches. Claimed amount stays as-is; claim logic uses schedule.
+        let mut merged = current_payout.tranches;
+        for i in 0..tranches.len() {
+            merged.push_back(tranches.get(i).unwrap());
+        }
+        current_payout.tranches = merged;
+
         env.storage()
             .persistent()
             .set(&balance_key, &current_payout);
@@ -1107,34 +1196,45 @@ impl PayoutRegistry {
         maintainer.require_auth_for_args((maintainer.clone(),).into_val(&env));
 
         let balance_key = DataKey::MaintainerBalance(maintainer.clone());
-        let mut payout: MaintainerPayout =
-            env.storage()
-                .persistent()
-                .get(&balance_key)
-                .unwrap_or(MaintainerPayout {
-                    amount: 0,
-                    unlock_timestamp: 0,
-                });
+        let mut payout: MaintainerPayout = env.storage().persistent().get(&balance_key).unwrap_or(MaintainerPayout {
+            amount: 0,
+            claimed_amount: 0,
+            tranches: Vec::new(&env),
+        });
 
         if payout.amount == 0 {
             panic_with_error!(&env, PrinceError::NoClaimableBalance);
         }
 
-        if env.ledger().timestamp() < payout.unlock_timestamp {
+        // Compute vested (releasable) total based on current ledger timestamp.
+        let now = env.ledger().timestamp();
+        let mut vested_total: i128 = 0;
+        for i in 0..payout.tranches.len() {
+            let tranche = payout.tranches.get(i).unwrap();
+            if now >= tranche.unlock_timestamp {
+                vested_total = vested_total
+                    .checked_add(tranche.amount)
+                    .unwrap_or_else(|| panic_with_error!(&env, PrinceError::PayoutOverflow));
+            }
+        }
+
+        // If nothing new is vested beyond already-claimed amount => locked.
+        if vested_total <= payout.claimed_amount {
             panic_with_error!(&env, PrinceError::PayoutLocked);
         }
 
-        let amount_to_claim = payout.amount;
+        let amount_to_claim = vested_total - payout.claimed_amount;
 
-        // Effects: Update the Persistent Storage first (CEI)
-        // Reset balance BEFORE transfer to prevent reentrancy or state corruption
-        payout.amount = 0;
+        // Effects: update payout accounting before external token transfer.
+        payout.claimed_amount = vested_total;
+        payout.amount = payout.amount - amount_to_claim;
         env.storage().persistent().set(&balance_key, &payout);
         env.storage().persistent().extend_ttl(
             &balance_key,
             PERSISTENT_LIFETIME_THRESHOLD,
             PERSISTENT_BUMP_AMOUNT,
         );
+
 
         // Interactions: Execute the token transfer as the absolute last step
         // This follows the Check-Effects-Interactions pattern.

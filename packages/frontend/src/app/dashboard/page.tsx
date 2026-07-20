@@ -26,6 +26,7 @@ import {
   submitSignedTransaction,
 } from "@/lib/sorobanClient";
 import type { Organization, MaintainerBalance } from "@/lib/contractTypes";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ── Inner Component (uses useSearchParams) ────────────────────────────────────
 
@@ -351,7 +352,9 @@ function DashboardPageInner() {
                   </div>
 
                   <div className="mb-8">
+                  <ErrorBoundary variant="inline">
                     <FundingHistoryChart orgId={organization.id} />
+                    </ErrorBoundary>
                   </div>
 
                   {/* ── Maintainer Balances ── */}
@@ -362,12 +365,14 @@ function DashboardPageInner() {
                       </h3>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {optimisticBalances.map((balance) => (
+                          <ErrorBoundary key={balance.address} variant="inline">
                           <PayoutCard
                             key={balance.address}
                             balance={balance}
                             onClaim={handleClaim}
                             isClaiming={claimingAddress === balance.address}
                           />
+                          </ErrorBoundary>
                         ))}
                       </div>
                     </div>
@@ -393,6 +398,7 @@ function DashboardPageInner() {
       </main>
 
       {showFundModal && organization && (
+        <ErrorBoundary variant="inline">
         <FundOrgModal
           orgId={organization.id}
           onClose={() => setShowFundModal(false)}
@@ -401,9 +407,11 @@ function DashboardPageInner() {
             void handleLookupOrg();
           }}
         />
+        </ErrorBoundary>
       )}
 
       {showAllocateModal && organization && (
+        <ErrorBoundary variant="inline">
         <AllocatePayoutModal
           orgId={organization.id}
           onClose={() => setShowAllocateModal(false)}
@@ -416,6 +424,7 @@ function DashboardPageInner() {
             setTimeout(() => void handleLookupOrg(), 5000); 
           }}
         />
+        </ErrorBoundary>
       )}
     </div>
   );
