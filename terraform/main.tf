@@ -178,3 +178,16 @@ module "cloudwatch_dashboard" {
     Environment = var.environment
   }
 }
+
+module "asset_cdn" {
+  source = "./modules/asset-cdn"
+
+  name              = "${var.project_name}-${var.environment}-assets"
+  asset_bucket_name = var.asset_bucket_name
+  price_class       = var.cloudfront_price_class
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}

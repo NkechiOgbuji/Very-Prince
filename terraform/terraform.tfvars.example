@@ -11,6 +11,12 @@ environment              = "shared"
 state_bucket_name        = "very-prince-terraform-state"
 dynamodb_lock_table_name = "very-prince-terraform-locks"
 
+# Existing private bucket containing the Next.js build output. CloudFront is
+# granted read access only to the _next/static/ prefix.
+asset_bucket_name = "very-prince-nextjs-assets"
+# PriceClass_All uses all edge locations for the lowest global delivery latency.
+cloudfront_price_class = "PriceClass_All"
+
 # ──── Monitoring & ECS Variables ──────────────────────────────────────────────
 # Uncomment and customize these for your deployment:
 # alert_email_addresses  = ["ops@example.com"]

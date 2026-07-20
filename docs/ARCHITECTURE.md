@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the AWS infrastructure provisioned via Terraform for the very-prince backend service. The infrastructure enables CloudWatch log aggregation, metric alarms, dashboards, and SNS alert notifications for an ECS Fargate cluster.
+This document describes the AWS infrastructure provisioned via Terraform for the very-prince backend service and its Next.js static-asset CDN. The infrastructure enables CloudWatch log aggregation, metric alarms, dashboards, SNS alert notifications for an ECS Fargate cluster, and global delivery of immutable frontend bundles.
 
 ```mermaid
 flowchart TD
@@ -27,6 +27,8 @@ flowchart TD
     end
     
     Jenkins["Jenkins Pipeline"] -->|terraform apply| State
+    Browser["Browser"] -->|HTTPS /_next/static/*| CDN["CloudFront\nGlobal edge network"]
+    CDN -->|OAC SigV4| Assets["Private S3 asset bucket\n_next/static/* only"]
     Service -->|awslogs driver| CWLogs
     CWLogs -->|metric filters| CWDashboard
     CWAlerts -->|alarm actions| SNSTopic
@@ -69,6 +71,13 @@ flowchart TD
 - Email subscriptions from `alert_email_addresses` variable
 - CloudWatch alarm publishing policy
 
+### Asset CDN (`terraform/modules/asset-cdn/`)
+- CloudFront distribution using every edge location (`PriceClass_All` by default) to minimize global static-asset latency
+- CloudFront Origin Access Control (SigV4) for a private S3 origin; no S3 public access is required
+- Bucket policy permits CloudFront read access only to `/_next/static/*` and only from this distribution
+- `_next/static/*` uses a dedicated cache policy with a fixed one-year TTL. These paths contain Next.js content-hashed, immutable bundles.
+- All other paths use a zero-TTL fallback, so immutable caching cannot be applied accidentally to mutable content.
+
 ## Data Flow
 
 1. ECS tasks emit stdout/stderr → `awslogs` driver → CloudWatch Log Group
@@ -76,6 +85,7 @@ flowchart TD
 3. Alarms evaluate metrics every 60s; trigger SNS on threshold breach
 4. SNS delivers to email subscribers (and any HTTPS/Lambda endpoints added manually)
 5. Dashboard visualizes all metrics in single pane
+6. Browser requests for `/_next/static/*` are served from the nearest CloudFront edge; cache misses are signed and fetched from the private S3 origin.
 
 ## Jenkins Pipeline (`Jenkinsfile`)
 - Declarative syntax
@@ -87,6 +97,11 @@ flowchart TD
 - `scripts/terraform-setup.ps1`: Chocolatey/Scoop/Zip install
 - No WSL required
 - Jenkins pipeline uses `bat` on Windows agents
+- The CDN module uses only the Terraform AWS provider and runs with the native Windows Terraform CLI; WSL is not required.
+
+## CDN Configuration
+
+Set `asset_bucket_name` to the existing private S3 bucket that receives the Next.js build output. Upload immutable bundles beneath `_next/static/`; the module intentionally grants CloudFront access only to that prefix. Use the `cloudfront_distribution_domain_name` Terraform output as the asset host (for example, as the Next.js `assetPrefix` origin) when deploying the frontend.
 
 ## Operations
 

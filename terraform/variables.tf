@@ -102,3 +102,21 @@ variable "target_group_arn" {
   type        = string
   default     = ""
 }
+
+# ─── Next.js Static Asset CDN Variables ────────────────────────────────────
+
+variable "asset_bucket_name" {
+  description = "Name of the existing private S3 bucket that contains Next.js static assets."
+  type        = string
+}
+
+variable "cloudfront_price_class" {
+  description = "CloudFront edge-location price class. Use PriceClass_All to minimize global latency."
+  type        = string
+  default     = "PriceClass_All"
+
+  validation {
+    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
+    error_message = "cloudfront_price_class must be PriceClass_100, PriceClass_200, or PriceClass_All."
+  }
+}

@@ -48,3 +48,13 @@ output "cloudwatch_log_group_name" {
   description = "Name of the CloudWatch log group"
   value       = module.cloudwatch_logs.log_group_name
 }
+
+output "cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution serving immutable Next.js assets."
+  value       = module.asset_cdn.distribution_id
+}
+
+output "cloudfront_distribution_domain_name" {
+  description = "CloudFront domain name for immutable Next.js assets."
+  value       = module.asset_cdn.distribution_domain_name
+}
