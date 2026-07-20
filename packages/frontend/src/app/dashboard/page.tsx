@@ -18,15 +18,14 @@ import { ApiKeySettings } from "@/components/ApiKeySettings";
 import { FundingHistoryChart } from "@/components/FundingHistoryChart";
 import { useFreighter } from "@/hooks/useFreighter";
 import {
-  readOrganization,
   readMaintainers,
   readClaimableBalance,
-  readOrgBudget,
   buildClaimPayoutTransaction,
   submitSignedTransaction,
 } from "@/lib/sorobanClient";
 import type { Organization, MaintainerBalance } from "@/lib/contractTypes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useOrganizationData } from "@/hooks/useOrganizationData";
 
 // ── Inner Component (uses useSearchParams) ────────────────────────────────────
 
@@ -36,8 +35,7 @@ function DashboardPageInner() {
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [orgIdInput, setOrgIdInput] = useState("");
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [orgBudget, setOrgBudget] = useState<{ stroops: bigint; xlm: string } | null>(null);
+  const [lookupOrgId, setLookupOrgId] = useState<string | undefined>(undefined);
   const [showFundModal, setShowFundModal] = useState(false);
   const [claimingAddress, setClaimingAddress] = useState<string | null>(null);
   const [balances, setBalances] = useState<MaintainerBalance[]>([]);
@@ -73,6 +71,15 @@ function DashboardPageInner() {
     }
   );
 
+  const {
+    data: orgData,
+    isLoading: isOrgLoading,
+    error: orgQueryError,
+    refetch: refetchOrgData,
+  } = useOrganizationData(lookupOrgId);
+  const organization = orgData?.organization ?? null;
+  const orgBudget = orgData?.budget ?? null;
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -85,18 +92,19 @@ function DashboardPageInner() {
     if (!id) return;
     setIsLoading(true);
     setError(null);
-    setOrganization(null);
     setBalances([]);
-    setOrgBudget(null);
 
     try {
-      const [org, budget, maintainerAddresses] = await Promise.all([
-        readOrganization(id),
-        readOrgBudget(id),
-        readMaintainers(id),
-      ]);
-      setOrganization(org);
-      setOrgBudget(budget);
+      let maintainerAddresses: string[];
+      if (id === lookupOrgId) {
+        // Same org already tracked by the query — just refetch it, then
+        // read maintainers directly since we need the address list now.
+        await refetchOrgData();
+        maintainerAddresses = await readMaintainers(id);
+      } else {
+        setLookupOrgId(id);
+        maintainerAddresses = await readMaintainers(id);
+      }
 
       const balanceResults = await Promise.all(
         maintainerAddresses.map((addr) => readClaimableBalance(addr))
@@ -108,7 +116,7 @@ function DashboardPageInner() {
     } finally {
       setIsLoading(false);
     }
-  }, [orgIdInput]);
+  }, [orgIdInput, lookupOrgId, refetchOrgData]);
 
   /** Auto-lookup when ?org= param is present in the URL. */
   useEffect(() => {
@@ -239,11 +247,11 @@ function DashboardPageInner() {
                 />
                 <button
                   onClick={() => void handleLookupOrg()}
-                  disabled={isLoading || !orgIdInput.trim()}
-                  aria-label={isLoading ? "Looking up organization" : "Look up organization"}
+                  disabled={isLoading || isOrgLoading || !orgIdInput.trim()}
+                  aria-label={isLoading || isOrgLoading ? "Looking up organization" : "Look up organization"}
                   className="rounded-lg bg-gradient-to-r from-stellar-purple to-brand-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-stellar-purple/20 transition-all duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isLoading ? "Loading..." : "Lookup"}
+                  {isLoading || isOrgLoading ? "Loading..." : "Lookup"}
                 </button>
               </div>
               <p id="org-id-hint" className="mt-2 text-xs text-white/30">
@@ -283,9 +291,9 @@ function DashboardPageInner() {
             )}
 
             {/* ── Error ── */}
-            {error && (
+            {(error || orgQueryError) && (
               <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
+                {error ?? (orgQueryError instanceof Error ? orgQueryError.message : "Failed to load organization")}
               </div>
             )}
 
