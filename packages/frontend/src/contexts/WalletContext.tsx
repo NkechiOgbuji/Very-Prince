@@ -11,7 +11,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import freighterApi from '@stellar/freighter-api';
 
 // ── Type Definitions ───────────────────────────────────────────────────────
@@ -237,14 +237,17 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
   // ── Context Value ─────────────────────────────────────────────────────────
 
-  const contextValue: WalletContextType = {
-    ...walletState,
-    connectWallet,
-    disconnectWallet,
-    checkConnection,
-    signTransaction,
-    isLoading: walletState.isConnecting,
-  };
+  const contextValue: WalletContextType = useMemo(
+    () => ({
+      ...walletState,
+      connectWallet,
+      disconnectWallet,
+      checkConnection,
+      signTransaction,
+      isLoading: walletState.isConnecting,
+    }),
+    [walletState, connectWallet, disconnectWallet, checkConnection, signTransaction]
+  );
 
   return (
     <WalletContext.Provider value={contextValue}>
