@@ -9,6 +9,7 @@
 import { stellarService } from "../services/stellarService.js";
 import { safeGet, safeSet } from "../services/cache.js";
 import { prisma } from "../services/db.js";
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import type {
   GlobalStatsResponse,
   TVLResponse,
@@ -242,17 +243,18 @@ export const statsController = {
     const orgs = await stellarService.readAllOrganizations();
     const maintainerAddresses = new Set<string>();
 
-    // Collect all unique maintainer addresses
-    await Promise.all(
-      orgs.map(async (orgId) => {
-        const maintainers = await stellarService.readMaintainers(orgId);
-        maintainers.forEach((m) => maintainerAddresses.add(m));
-      })
-    );
+    // Collect all unique maintainer addresses, capped at 10 concurrent RPC
+    // calls at a time instead of firing one per org simultaneously.
+    await mapWithConcurrency(orgs, 10, async (orgId) => {
+      const maintainers = await stellarService.readMaintainers(orgId);
+      maintainers.forEach((m) => maintainerAddresses.add(m));
+    });
 
-    // Fetch stats for each maintainer
-    const maintainersData = await Promise.all(
-      [...maintainerAddresses].map(async (address) => {
+    // Fetch stats for each maintainer, same concurrency cap.
+    const maintainersData = await mapWithConcurrency(
+      [...maintainerAddresses],
+      10,
+      async (address) => {
         const stats = await stellarService.readProfileStats(address);
         return {
           address,
@@ -261,7 +263,7 @@ export const statsController = {
           organizationsAssisted: stats.orgIds.length,
           rawStroops: stats.totalStroops,
         };
-      })
+      }
     );
 
     // Sort by earnings descending
