@@ -14,9 +14,12 @@ interface AllocatePayoutModalProps {
   orgId: string;
   onClose: () => void;
   onSuccess: (optimisticData: { address: string, amount: bigint }) => void;
+  /** Called if the on-chain submission fails after the optimistic update
+   *  already fired, so the parent can reconcile immediately. */
+  onError?: () => void;
 }
 
-export function AllocatePayoutModal({ orgId, onClose, onSuccess }: AllocatePayoutModalProps) {
+export function AllocatePayoutModal({ orgId, onClose, onSuccess, onError }: AllocatePayoutModalProps) {
   const { publicKey, signTransaction } = useFreighter();
   const [maintainer, setMaintainer] = useState("");
   const [amount, setAmount] = useState("");
@@ -50,8 +53,12 @@ export function AllocatePayoutModal({ orgId, onClose, onSuccess }: AllocatePayou
       toastTransaction.success("Allocation confirmed on-chain!");
     } catch (err) {
       console.error(err);
-      toastTransaction.error(err, "Allocation failed");
+      toast.error(err instanceof Error ? err.message : "Allocation failed");
       setIsSubmitting(false);
+      // The optimistic update may have already fired (step 3, above) before
+      // this submission failed — reconcile immediately instead of leaving
+      // the phantom balance until the next scheduled refresh.
+      onError?.();
     }
   };
 
