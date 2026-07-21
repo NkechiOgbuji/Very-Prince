@@ -16,31 +16,6 @@ import {
   claimPayoutInputSchema,
 } from "../schemas/transactionSchemas.js";
 
-// ... inside appRouter:
-
-  transaction: t.router({
-    validateFundOrg: t.procedure
-      .input(fundOrgInputSchema)
-      .mutation(async ({ input }) => {
-        // Confirms org exists before the client bothers building a transaction.
-        await stellarService.readOrganizationDetails(input.orgId);
-        return { valid: true };
-      }),
-
-    validateAllocatePayout: t.procedure
-      .input(allocatePayoutInputSchema)
-      .mutation(async ({ input }) => {
-        await stellarService.readOrganizationDetails(input.orgId);
-        return { valid: true };
-      }),
-
-    validateClaimPayout: t.procedure
-      .input(claimPayoutInputSchema)
-      .mutation(async () => {
-        return { valid: true };
-      }),
-  }),
-
 // Create tRPC instance
 export const t = initTRPC.create();
 
@@ -157,6 +132,28 @@ export const appRouter = t.router({
       }))
       .query(async ({ input }) => {
         return statsController.getOrgFundingHistory(input.orgId);
+      }),
+  }),
+
+  transaction: t.router({
+    validateFundOrg: t.procedure
+      .input(fundOrgInputSchema)
+      .mutation(async ({ input }) => {
+        await stellarService.readOrganizationDetails(input.orgId);
+        return { valid: true };
+      }),
+
+    validateAllocatePayout: t.procedure
+      .input(allocatePayoutInputSchema)
+      .mutation(async ({ input }) => {
+        await stellarService.readOrganizationDetails(input.orgId);
+        return { valid: true };
+      }),
+
+    validateClaimPayout: t.procedure
+      .input(claimPayoutInputSchema)
+      .mutation(async () => {
+        return { valid: true };
       }),
   }),
 });
