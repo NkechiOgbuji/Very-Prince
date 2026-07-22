@@ -3,6 +3,7 @@ import { stellarService } from "../services/stellarService.js";
 import { redis } from "../services/cache.js";
 import type { PaginatedOrgsResponse, CursorPaginatedOrgsResponse } from "@very-prince/types";
 import { ipfsService } from "./ipfsService.js";
+import { sanitizeText } from "../utils/sanitize.js";
 
 export type { PaginatedOrgsResponse, CursorPaginatedOrgsResponse };
 
@@ -198,7 +199,9 @@ export class OrganizationService {
     description: string,
     logoBase64?: string
   ): Promise<string> {
-    return ipfsService.uploadOrgMetadata(name, description, logoBase64);
+    const sanitizedName = sanitizeText(name);
+    const sanitizedDescription = sanitizeText(description);
+    return ipfsService.uploadOrgMetadata(sanitizedName, sanitizedDescription, logoBase64);
   }
 }
 
