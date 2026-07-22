@@ -38,8 +38,9 @@ flowchart TD
     end
     
     Jenkins["Jenkins Pipeline\nBuild → Trivy scan → Terraform"] -->|terraform apply| State
-    Jenkins -->|docker build| Image["Backend image\nvery-prince-backend:$BUILD_NUMBER"]
-    Image -->|Trivy: fail on HIGH/CRITICAL CVEs| SecurityGate{"Security gate"}
+    Jenkins -->|docker build + push| BackendImage["Backend image\nvery-prince-backend:$BUILD_NUMBER"]
+    Jenkins -->|docker build + push| FrontendImage["Frontend image\nvery-prince-frontend:$BUILD_NUMBER"]
+    BackendImage -->|Trivy: fail on HIGH/CRITICAL CVEs| SecurityGate{"Security gate"}
     SecurityGate -->|pass| Service
     Browser["Browser"] -->|HTTPS /_next/static/*| CDN["CloudFront\nGlobal edge network"]
     CDN -->|OAC SigV4| Assets["Private S3 asset bucket\n_next/static/* only"]
@@ -207,7 +208,7 @@ https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashbo
 - Lambda function: `very-prince-shared-prune-snapshots`
 - EventBridge rule: `very-prince-shared-prune-schedule`
 - Lambda IAM role: `very-prince-shared-snapshot-prune-role`
-=======
+
 # Very-Prince Infrastructure Architecture
 
 ## Overview
@@ -412,19 +413,128 @@ These validations fail `terraform plan` early, before any AWS API call, so misco
 4. SNS delivers to email subscribers (and any HTTPS/Lambda endpoints added manually)
 5. Dashboard visualizes all metrics in single pane
 6. Browser requests for `/_next/static/*` are served from the nearest CloudFront edge; cache misses are signed and fetched from the private S3 origin.
+ main
+HEAD
+7. Jenkins builds and pushes `packages/backend/Dockerfile` as `ghcr.io/.../very-prince-backend:$BUILD_NUMBER` and `packages/frontend/Dockerfile` as `ghcr.io/.../very-prince-frontend:$BUILD_NUMBER`, scanning the backend image with Trivy before Terraform can apply changes.
+
+7. Jenkins builds `packages/backend/Dockerfile` as `very-prince-backend:$BUILD_NUMBER` and scans that exact local image with Trivy before Terraform can apply changes.
+8. EventBridge invokes the snapshot pruning Lambda on its configured schedule; the Lambda deletes manual RDS snapshots older than `rds_snapshot_retention_days`.
+ d8a8e63db1f830d044a2fd34ad48bce8b00e2ae8
+
 7. Webhook events enqueue to SQS and are deleted only after successful delivery. Failed receives remain available for retry; exhausted messages are copied to the DLQ with failure metadata, with native SQS redrive as a fallback.
 8. Jenkins builds `packages/backend/Dockerfile` as `very-prince-backend:$BUILD_NUMBER` and scans that exact local image with Trivy before Terraform can apply changes.
 9. EventBridge invokes the snapshot pruning Lambda on its configured schedule; the Lambda deletes manual RDS snapshots older than `rds_snapshot_retention_days`.
+ main
 
 ## Jenkins Pipeline (`Jenkinsfile`)
-- Declarative syntax
-- Stages: Setup → Build Docker Image → Scan Docker Image → **Init** → **Verify Backend Lock** → Validate → Plan → Apply (gated)
-- The image build uses `packages/backend/Dockerfile` and is tagged `very-prince-backend:$BUILD_NUMBER`.
-- Trivy runs `trivy image --exit-code 1 --severity HIGH,CRITICAL` against the compiled image. Any High or Critical CVE makes the scan command return a non-zero status, stopping the pipeline before Terraform apply/deployment.
-- OS detection: `isUnix()` → `sh` on Linux, `bat` on Windows. Jenkins agents require native Docker and Trivy CLIs on their `PATH`.
-- Artifact: `tfplan` passed between Plan/Apply
 
+- Declarative syntax
+- Stages:
+  1. **Setup** — verify tool versions (Terraform, AWS CLI, Docker, Trivy)
+  2. **Build & Push Images** — **parallel** backend + frontend builds using `docker buildx build` with BuildKit registry cache; both images pushed to `ghcr.io/bridgetthnkechi87-cloud/`
+  3. **Scan Backend Image** — Trivy scans the backend image for HIGH/CRITICAL CVEs; failure blocks the pipeline
+  4. **Init** — `terraform init` with explicit backend config
+  5. **Verify Backend Lock** — probes DynamoDB lock table to confirm backend reachability
+  6. **Validate** — `terraform validate`
+  7. **Plan** — `terraform plan -lock=true -lock-timeout=300s -out=tfplan`
+  8. **Apply** — gated on `main` branch with manual approval; applies the stashed plan
+
+### BuildKit Registry Caching
+
+The pipeline preserves BuildKit layer caches across Jenkins agents by pushing and pulling a dedicated **cache image** to the container registry:
+
+| Variable | Value | Purpose |
+|---|---|---|
+| `BUILDKIT_CACHE_REF_BACKEND`  | `ghcr.io/bridgetthnkechi87-cloud/very-prince-backend:buildcache` | Backend build cache |
+| `BUILDKIT_CACHE_REF_FRONTEND` | `ghcr.io/bridgetthnkechi87-cloud/very-prince-frontend:buildcache` | Frontend build cache |
+
+Each `docker buildx build` invocation uses:
+```
+--cache-from=type=registry,ref=<CACHE_REF>
+--cache-to=type=registry,ref=<CACHE_REF>,mode=max
+--push
+```
+
+The `mode=max` exports all layers (including intermediate build stages) so subsequent builds on **any** agent can reuse them. The local workspace is also preserved on success (see `post { success }`), so the agent-local BuildKit cache directory survives between runs as a secondary cache layer.
+
+### Dockerfile Build Caching Strategy
+
+Both `packages/backend/Dockerfile` and `packages/frontend/Dockerfile` use a 6-stage (backend) / 5-stage (frontend) multistage build with BuildKit cache mounts:
+
+1. **base** — shared Alpine + native dependencies (`libc6-compat`, `openssl`)
+2. **pruner** — Turbo prunes the monorepo to the target workspace + deps
+3. **deps** — `npm ci` with `--mount=type=cache,target=/root/.npm,id=npm-cache`; **no application source is copied**, so this layer is invalidated only when `package-lock.json` changes
+4. **builder** — copies source, generates Prisma client (backend) / runs Next.js build (frontend); cache mounts for `/app/node_modules/.cache`, per-package `.turbo`, and npm cache keep compilations warm
+5. **prod-deps** (backend only) — `npm prune --omit=dev` inside npm cache mount; strips Prisma engines and devDependencies
+6. **runner** — minimal runtime: non-root user, compiled output, pruned `node_modules` (backend) or Next.js standalone bundle (frontend)
+
+**Layer invalidation guarantees:**
+- Source-only changes (e.g., `packages/backend/src/**`) do **not** invalidate the `deps` stage
+- Only `package.json` / `package-lock.json` changes re-run `npm ci`
+- Cache mounts (`/root/.npm`, `node_modules/.cache`, `.turbo`) are keyed by BuildKit and reused across builds on the same agent; the registry cache (`:buildcache` image) provides the same reuse across agents
+
+### Security Scanning
+
+- Trivy runs `trivy image --exit-code 1 --severity HIGH,CRITICAL` against the **pushed** backend image reference.
+- The scan stage executes **after** the parallel build and **before** any Terraform stage, ensuring vulnerable images never reach deployment.
+- Frontend images are not scanned by default; add a parallel `Scan Frontend Image` stage if required.
+
+ HEAD
+### State Locking in CI
+
+The `Init` stage calls `terraform init` with explicit `-backend-config`
+flags so the S3 bucket, DynamoDB lock table, region, and `encrypt=true`
+settings are always passed to the backend (matching the values in
+`terraform/backend.tf`):
+
+```
+terraform init \
+  -input=false \
+  -backend-config="bucket=${STATE_BUCKET_NAME}" \
+  -backend-config="dynamodb_table=${DYNAMODB_LOCK_TABLE}" \
+  -backend-config="region=${AWS_DEFAULT_REGION}" \
+  -backend-config="encrypt=true"
+```
+
+Immediately after `Init`, the `Verify Backend Lock` stage probes the
+DynamoDB lock table by running `terraform force-unlock -force
+nonexistent-lock-id`. Terraform contacts the configured lock table and
+returns an error referencing the missing lock. The stage asserts that
+the output contains the word `lock` (case-insensitive) — this proves the
+S3 backend and DynamoDB lock table are both reachable from the Jenkins
+agent. The stage intentionally tolerates the non-zero exit code from
+`force-unlock`; only the absence of the word `lock` in the output fails
+the build.
+
+Both `Plan` and `Apply` use `-lock=true -lock-timeout=300s` so every CI
+run asserts DynamoDB-side locks during execution.
+
+### Local Development with `docker-bake.hcl`
+
+The `docker-bake.hcl` file at the repo root provides a single-command
+multi-platform build that uses the same registry cache refs as CI:
+
+```bash
+# Build both images (pushes to registry, requires auth)
+docker buildx bake
+
+# Build locally without pushing (loads into local Docker daemon)
+docker buildx bake --set "*.output=type=docker"
+
+# Build only backend
+docker buildx bake backend
+
+# Override tag
+docker buildx bake --set "*.tags=myregistry/very-prince-backend:v1.2.3"
+```
+
+Cache refs in `docker-bake.hcl` align with the Jenkins environment variables:
+- Backend: `ghcr.io/bridgetthnkechi87-cloud/very-prince-backend:buildcache`
+- Frontend: `ghcr.io/bridgetthnkechi87-cloud/very-prince-frontend:buildcache`
+
+ d8a8e63db1f830d044a2fd34ad48bce8b00e2ae8
 ## Windows Support
+
 - `scripts/terraform-setup.ps1`: Installs Terraform on native Windows via Chocolatey, Scoop, or direct zip download. No WSL or Linux subsystem is required.
 - `scripts/bootstrap-terraform-backend.ps1`: Native Windows bootstrap equivalent of `scripts/bootstrap-terraform-backend.sh`; migrates local state to S3 + DynamoDB using `terraform.exe` directly.
 - The Jenkins pipeline uses `bat` steps on Windows agents and `sh` steps on Unix agents.
@@ -455,10 +565,16 @@ https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashbo
 - `very-prince-shared-critical-alerts`
 
 ### Log Group
+ HEAD
+- `/ecs/very-prince-backend`
 - `/ecs/very-prince-backend`
 
 ### RDS Snapshot Lifecycle
 - Lambda function: `very-prince-shared-prune-snapshots`
 - EventBridge rule: `very-prince-shared-prune-schedule`
 - Lambda IAM role: `very-prince-shared-snapshot-prune-role`
+main
+ d8a8e63db1f830d044a2fd34ad48bce8b00e2ae8
 
+
+ main
