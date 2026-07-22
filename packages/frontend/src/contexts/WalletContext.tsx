@@ -23,6 +23,7 @@ export interface WalletState {
   network: NetworkType;
   isConnected: boolean;
   isConnecting: boolean;
+  isInitialized: boolean;
   error: string | null;
 }
 
@@ -71,6 +72,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     network: 'testnet',
     isConnected: false,
     isConnecting: false,
+    isInitialized: false,
     error: null,
   });
 
@@ -100,6 +102,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         network,
         isConnected: true,
         isConnecting: false,
+        isInitialized: true,
         error: null,
       });
     } catch (error) {
@@ -107,6 +110,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setWalletState(prev => ({
         ...prev,
         isConnecting: false,
+        isInitialized: true,
         error: errorMessage,
       }));
     }
@@ -118,6 +122,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       network: 'testnet',
       isConnected: false,
       isConnecting: false,
+      isInitialized: true,
       error: null,
     });
   }, []);
@@ -160,7 +165,20 @@ export function WalletProvider({ children }: WalletProviderProps) {
           ...prev,
           isConnected: false,
           publicKey: null,
+          isInitialized: true,
           error: 'Freighter wallet is not installed',
+        }));
+        return;
+      }
+
+      const allowed = await freighterApi.isAllowed();
+      if (!allowed) {
+        setWalletState(prev => ({
+          ...prev,
+          isConnected: false,
+          publicKey: null,
+          isInitialized: true,
+          error: null,
         }));
         return;
       }
@@ -174,6 +192,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           network,
           isConnected: true,
           isConnecting: false,
+          isInitialized: true,
           error: null,
         });
       } else {
@@ -181,6 +200,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           ...prev,
           isConnected: false,
           publicKey: null,
+          isInitialized: true,
           error: null,
         }));
       }
@@ -190,6 +210,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         ...prev,
         isConnected: false,
         publicKey: null,
+        isInitialized: true,
         error: errorMessage,
       }));
     }
@@ -212,6 +233,27 @@ export function WalletProvider({ children }: WalletProviderProps) {
       unsubscribe?.();
     };
   }, [walletState.isConnected]);
+
+  // ── Wallet Event Listeners ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleWalletChange = () => {
+      checkConnection();
+    };
+
+    if (typeof window !== 'undefined' && (window as any).freighter) {
+      const freighter = (window as any).freighter;
+      freighter.on?.('accountChanged', handleWalletChange);
+      freighter.on?.('connected', handleWalletChange);
+      freighter.on?.('disconnected', handleWalletChange);
+
+      return () => {
+        freighter.off?.('accountChanged', handleWalletChange);
+        freighter.off?.('connected', handleWalletChange);
+        freighter.off?.('disconnected', handleWalletChange);
+      };
+    }
+  }, [checkConnection]);
 
   // ── Initial Connection Check ─────────────────────────────────────────────
 

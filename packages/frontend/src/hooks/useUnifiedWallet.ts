@@ -110,6 +110,12 @@ export function useUnifiedWallet(): UnifiedWalletState & WalletActions {
             isConnected: !!pk,
             publicKey: pk ?? null,
           }));
+        } else {
+          setState(prev => ({
+            ...prev,
+            isConnected: false,
+            publicKey: null,
+          }));
         }
       } else {
         setState(prev => ({
