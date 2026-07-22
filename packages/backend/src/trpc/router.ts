@@ -18,6 +18,7 @@ import {
   allocatePayoutInputSchema,
   claimPayoutInputSchema,
 } from "../schemas/transactionSchemas.js";
+import { subscriptionRouter } from './subscriptions.js';
 
 export { t };
 
@@ -137,6 +138,8 @@ export const appRouter = t.router({
       .use(withTrpcCache(() => trpcCacheKeys.analyticsLeaderboard(), TRPC_CACHE_TTL.ANALYTICS_LEADERBOARD))
       .query(() => analyticsController.getLeaderboard()),
   }),
+
+  events: subscriptionRouter,
 
   transaction: t.router({
     validateFundOrg: t.procedure
