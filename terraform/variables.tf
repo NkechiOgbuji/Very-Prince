@@ -82,19 +82,78 @@ variable "desired_count" {
   default     = 2
 }
 
-variable "private_subnet_ids" {
-  description = "Private subnet IDs for ECS service placement"
+# ─── Networking Variables ────────────────────────────────────────────────
+
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC."
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "availability_zones" {
+  description = "List of availability zones to deploy subnets into."
   type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
+}
+
+variable "private_subnet_cidrs" {
+  description = "CIDR blocks for private subnets, one per availability zone."
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidrs) >= 1
+    error_message = "At least one private subnet CIDR must be provided."
+  }
+}
+
+variable "public_subnet_cidrs" {
+  description = "CIDR blocks for public subnets (ALB + NAT gateways)."
+  type        = list(string)
+  default     = ["10.0.101.0/24", "10.0.102.0/24"]
+
+  validation {
+    condition     = length(var.public_subnet_cidrs) >= 1
+    error_message = "At least one public subnet CIDR must be provided."
+  }
+}
+
+variable "enable_nat_gateway" {
+  description = "Deploy NAT gateways for private-subnet outbound traffic. Set false when using VPC endpoints or a transit gateway."
+  type        = bool
+  default     = true
+}
+
+variable "container_port" {
+  description = "Application container port (used for ALB target group and ingress SG rules)."
+  type        = number
+  default     = 3001
+}
+
+variable "health_check_path" {
+  description = "ALB target group health check endpoint."
+  type        = string
+  default     = "/health"
+}
+
+# ─── ECS Service Variables (some now computed from networking module) ────────
+
+variable "private_subnet_ids" {
+  description = "Private subnet IDs for ECS service placement (now computed from networking module; kept for backward compatibility)."
+  type        = list(string)
+  default     = []
 }
 
 variable "service_sg_id" {
-  description = "Security group ID for ECS service tasks"
+  description = "Security group ID for ECS service tasks (now computed from networking module; kept for backward compatibility)."
   type        = string
+  default     = ""
 }
 
 variable "image_uri" {
   description = "Docker image URI for the backend service"
   type        = string
+  default     = "public.ecr.aws/nginx/nginx:alpine"
 }
 
 variable "target_group_arn" {

@@ -127,6 +127,24 @@ resource "aws_dynamodb_table" "terraform_locks" {
 
 # ──── Module Compositions ─────────────────────────────────────────────────────
 
+module "networking" {
+  source = "./modules/networking"
+
+  name                 = var.project_name
+  vpc_cidr             = var.vpc_cidr
+  availability_zones   = var.availability_zones
+  private_subnet_cidrs = var.private_subnet_cidrs
+  public_subnet_cidrs  = var.public_subnet_cidrs
+  enable_nat_gateway   = var.enable_nat_gateway
+  container_port       = var.container_port
+  health_check_path    = var.health_check_path
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
 module "ecs_cluster" {
   source = "./modules/ecs-cluster"
   name   = var.project_name
@@ -169,9 +187,9 @@ module "ecs_service" {
   task_cpu           = var.task_cpu
   task_memory        = var.task_memory
   desired_count      = var.desired_count
-  private_subnet_ids = var.private_subnet_ids
-  service_sg_id      = var.service_sg_id
-  target_group_arn   = var.target_group_arn
+  private_subnet_ids = module.networking.private_subnet_ids
+  service_sg_id      = module.networking.ecs_tasks_security_group_id
+  target_group_arn   = module.networking.target_group_arn
   aws_region         = var.aws_region
 
   tags = {

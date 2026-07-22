@@ -6,8 +6,6 @@ resource "aws_ecs_cluster" "main" {
     value = "enabled"
   }
 
-  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
-
   tags = merge(var.tags, {
     Name = var.name
   })

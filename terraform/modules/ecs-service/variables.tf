@@ -57,6 +57,17 @@ variable "target_group_arn" {
   default     = ""
 }
 
+variable "container_port" {
+  description = "Container port to expose"
+  type        = number
+  default     = 3001
+
+  validation {
+    condition     = var.container_port > 0 && var.container_port <= 65535
+    error_message = "container_port must be between 1 and 65535."
+  }
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string

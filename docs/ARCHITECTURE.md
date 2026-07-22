@@ -100,16 +100,41 @@ DynamoDB locking is enforced on every run.
 ## Components
 
 ### ECS Cluster (`terraform/modules/ecs-cluster/`)
-- Fargate + Fargate Spot capacity providers
+- Fargate + Fargate Spot capacity providers, configured via `aws_ecs_cluster_capacity_providers`
 - Container Insights enabled for enhanced metrics
 - Tagged with Project/Environment
+- Strict `name` validation (non-empty, ≤255 chars, starts with a letter, alphanumeric/hyphen/underscore only)
+
+### Fargate Task Definition (`terraform/modules/fargate-task/`)
+- Strict, declarative `aws_ecs_task_definition` module used by `ecs-service`
+- Enforces Fargate compatibility: `network_mode = "awsvpc"`, `requires_compatibilities = ["FARGATE"]`
+- Validates CPU, memory, OS family, and CPU architecture at the variable layer
+- Supports optional task role and required execution role
 
 ### ECS Service (`terraform/modules/ecs-service/`)
 - Task definition with `awslogs` log driver → CloudWatch Logs
-- Execution role: CloudWatch Logs write + ECR pull
-- Task role: Least-privilege application permissions
-- Network: Private subnets + security group
+- Execution role: CloudWatch Logs write + ECR pull (via `AmazonECSTaskExecutionRolePolicy` managed policy)
+- Task role: Least-privilege application permissions (empty inline policy by default; attach application-specific policies externally)
+- Network: Private subnets + security group; no public IP assignment
 - Optional ALB target group attachment
+- Deployment circuit breaker with automatic rollback
+
+#### IAM Roles Created by `ecs-service` Module
+
+| Role | Name Pattern | Trust Policy | Attached Policies | Purpose |
+|---|---|---|---|---|
+| Execution Role | `{service-name}-execution-role` | `ecs-tasks.amazonaws.com` | `arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy` | Allows ECS agent to pull container images from ECR and write task logs to CloudWatch Logs |
+| Task Role | `{service-name}-task-role` | `ecs-tasks.amazonaws.com` | None (empty inline policy) | Assumed by the running application container; attach least-privilege policies for AWS API access (e.g., SSM Parameter Store, Secrets Manager) via external `aws_iam_role_policy` resources |
+
+### Strict Module Validation
+
+All ECS-related Terraform modules validate inputs at the variable layer to prevent invalid resource configurations:
+
+- `ecs-cluster`: `name` must be non-empty, ≤255 characters, start with a letter, and contain only letters, digits, hyphens, and underscores.
+- `fargate-task`: `cpu` and `memory` must be Fargate-supported values; `network_mode` must be `awsvpc`; `requires_compatibilities` must include `FARGATE`; `operating_system_family` and `cpu_architecture` must be ECS-supported values.
+- `ecs-service`: `container_port` must be in the range 1–65535.
+
+These validations fail `terraform plan` early, before any AWS API call, so misconfigurations surface during code review rather than at apply time.
 
 ### CloudWatch Logs (`terraform/modules/cloudwatch-logs/`)
 - Log group: `/ecs/very-prince-backend`
@@ -187,10 +212,10 @@ Both `Plan` and `Apply` use `-lock=true -lock-timeout=300s` so every CI
 run asserts DynamoDB-side locks during execution.
 
 ## Windows Support
-- `scripts/terraform-setup.ps1`: Chocolatey/Scoop/Zip install
-- No WSL required
-- Jenkins pipeline uses `bat` on Windows agents
-- The CDN module uses only the Terraform AWS provider and runs with the native Windows Terraform CLI; WSL is not required.
+- `scripts/terraform-setup.ps1`: Installs Terraform on native Windows via Chocolatey, Scoop, or direct zip download. No WSL or Linux subsystem is required.
+- `scripts/bootstrap-terraform-backend.ps1`: Native Windows bootstrap equivalent of `scripts/bootstrap-terraform-backend.sh`; migrates local state to S3 + DynamoDB using `terraform.exe` directly.
+- The Jenkins pipeline uses `bat` steps on Windows agents and `sh` steps on Unix agents.
+- All Terraform modules use only the AWS provider and run with the native Windows Terraform CLI; WSL is not required.
 
 ## CDN Configuration
 

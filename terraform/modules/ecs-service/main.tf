@@ -1,39 +1,66 @@
-resource "aws_ecs_task_definition" "backend" {
+# ─────────────────────────────────────────────────────────────────────────────
+# ECS Service module — Task Definition (strict, via fargate-task)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The task definition is delegated to the strict `fargate-task` module so all
+# validation (cpu, memory, network_mode, OS family, architecture) is enforced
+# at the type level. This file only composes the container definitions payload
+# and wires the service to that task definition. IAM roles are defined in
+# iam.tf.
+# ─────────────────────────────────────────────────────────────────────────────
+
+locals {
+  container_definitions = jsonencode([
+    {
+      name      = var.name
+      image     = var.image_uri
+      cpu       = var.task_cpu
+      memory    = var.task_memory
+      essential = true
+      portMappings = [
+        {
+          containerPort = var.container_port
+          protocol      = "tcp"
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = var.log_group_name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "ecs"
+        }
+      }
+      environment = []
+    }
+  ])
+}
+
+module "task_definition" {
+  source = "../fargate-task"
+
   family                   = var.name
-  network_mode             = "awsvpc"
   cpu                      = tostring(var.task_cpu)
   memory                   = tostring(var.task_memory)
-  requires_compatibilities = ["FARGATE"]
+  container_definitions    = local.container_definitions
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
-
-  container_definitions = jsonencode([{
-    name   = var.name
-    image  = var.image_uri
-    cpu    = var.task_cpu
-    memory = var.task_memory
-    portMappings = [{
-      containerPort = 3001
-      protocol      = "tcp"
-    }]
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = var.log_group_name
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
-      }
-    }
-    environment = []
-  }])
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  operating_system_family  = "LINUX"
+  cpu_architecture         = "X86_64"
 
   tags = var.tags
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ECS Service
+# ─────────────────────────────────────────────────────────────────────────────
+
 resource "aws_ecs_service" "backend" {
   name            = var.name
   cluster         = var.cluster_id
-  task_definition = aws_ecs_task_definition.backend.arn
+  task_definition = module.task_definition.task_definition_arn
   launch_type     = "FARGATE"
   desired_count   = var.desired_count
 
@@ -52,7 +79,7 @@ resource "aws_ecs_service" "backend" {
     content {
       target_group_arn = var.target_group_arn
       container_name   = var.name
-      container_port   = 3001
+      container_port   = var.container_port
     }
   }
 
