@@ -18,6 +18,7 @@ import {
   allocatePayoutInputSchema,
   claimPayoutInputSchema,
 } from "../schemas/transactionSchemas.js";
+import { syncRouter } from './syncRouter.js';
 import { subscriptionRouter } from './subscriptions.js';
 
 export { t };
@@ -162,6 +163,8 @@ export const appRouter = t.router({
         return { valid: true };
       }),
   }),
+
+  sync: syncRouter,
 });
 
 export type AppRouter = typeof appRouter;
